@@ -39,6 +39,4 @@ Thumbs.db
 *.log
 coverage/
 docs/
-docker-compose.yml
-
 

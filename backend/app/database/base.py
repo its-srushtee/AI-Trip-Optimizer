@@ -1,21 +1,22 @@
 """SQLAlchemy engine, session factory and declarative Base."""
-from sqlalchemy import create_engine 
-from sqlalchemy .orm import DeclarativeBase ,sessionmaker 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
-from app .core .config import settings 
+from app.core.config import settings
 
-connect_args =(
-{"check_same_thread":False }if settings .DATABASE_URL .startswith ("sqlite")else {}
+connect_args = (
+    {"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {}
 )
 
-engine =create_engine (
-settings .DATABASE_URL ,
-connect_args =connect_args ,
-pool_pre_ping =True ,
-future =True ,
+engine = create_engine(
+    settings.DATABASE_URL,
+    connect_args=connect_args,
+    pool_pre_ping=True,  # safe for Postgres/Neon/Supabase pooling
+    future=True,
 )
 
-SessionLocal =sessionmaker (bind =engine ,autocommit =False ,autoflush =False ,future =True )
+SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, future=True)
 
-class Base (DeclarativeBase ):
-    pass 
+
+class Base(DeclarativeBase):
+    pass

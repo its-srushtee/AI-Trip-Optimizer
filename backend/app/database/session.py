@@ -1,9 +1,10 @@
 """FastAPI dependency yielding a SQLAlchemy session per request."""
-from app .database .base import SessionLocal 
+from app.database.base import SessionLocal
 
-def get_db ():
-    db =SessionLocal ()
-    try :
-        yield db 
-    finally :
-        db .close ()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

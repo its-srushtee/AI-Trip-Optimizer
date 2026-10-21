@@ -1,4 +1,7 @@
-
+/**
+ * Page background. Deliberately plain — a solid themed surface.
+ * (Previously aurora blobs + a masked grid + a glowing top rule; all removed.)
+ */
 export default function Background() {
   return (
     <div

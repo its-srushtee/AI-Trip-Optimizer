@@ -38,6 +38,7 @@ export default function SettingsModal({
 
   if (!open) return null
 
+  // An empty object is truthy — check for real content, not just presence.
   const prefs = user?.preferences
   const hasPrefs = !!prefs && Object.keys(prefs).length > 0 && !!prefs.style
 
@@ -67,7 +68,7 @@ export default function SettingsModal({
         </div>
 
         <div className="px-5 py-5">
-          
+          {/* Account */}
           <section>
             <h3 className="eyebrow">Account</h3>
             <div className="mt-3 space-y-3">
@@ -101,6 +102,7 @@ export default function SettingsModal({
             </div>
           </section>
 
+          {/* Preferences */}
           <section className="mt-6 border-t border-subtle pt-5">
             <div className="flex items-baseline justify-between gap-2">
               <h3 className="eyebrow">Travel preferences</h3>
@@ -160,11 +162,13 @@ export default function SettingsModal({
             )}
           </section>
 
+          {/* Appearance */}
           <section className="mt-6 border-t border-subtle pt-5">
             <h3 className="eyebrow">Appearance</h3>
             <ThemeSegment className="mt-3 max-w-[16rem]" />
           </section>
 
+          {/* Data */}
           <section className="mt-6 border-t border-subtle pt-5">
             <h3 className="eyebrow">Data</h3>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">

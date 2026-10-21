@@ -1,6 +1,10 @@
 import { Link } from 'react-router-dom'
 import { X } from 'lucide-react'
 
+/**
+ * Shown on the dashboard when a signed-in user hasn't set their travel
+ * preferences yet. Dismissible, and gone for good once the profile is complete.
+ */
 export default function ProfilePrompt({ onDismiss }) {
   return (
     <div

@@ -1,6 +1,17 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../services/api.js'
 
+/**
+ * Site-level photo credit.
+ *
+ * Required by provider terms, not decoration:
+ *   - Pexels:   "show a prominent link to Pexels" wherever their API is used.
+ *   - Unsplash: the app must attribute Unsplash itself, with utm parameters.
+ *
+ * Per-image credits on the cards satisfy the *photographer* half; this
+ * satisfies the *platform* half. Only providers that have actually served an
+ * image are listed, so a deployment with no key shows nothing.
+ */
 export default function ProviderCredit({ className = '' }) {
   const [providers, setProviders] = useState([])
 

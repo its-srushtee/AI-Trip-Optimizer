@@ -1,4 +1,4 @@
-
+/** Inclusive day count between two ISO dates. 0 when either is missing/invalid. */
 export function daysBetween(start, end) {
   if (!start || !end) return 0
   const s = new Date(start)

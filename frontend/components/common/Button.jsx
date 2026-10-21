@@ -1,4 +1,7 @@
-
+/**
+ * Button. Three variants, two sizes, one fixed height per size so rows of
+ * buttons always align. Solid accent fill — no gradients, no glow.
+ */
 export default function Button({
   children,
   variant = 'primary',

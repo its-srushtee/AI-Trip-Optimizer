@@ -4,6 +4,7 @@ export function readTheme() {
   return document.documentElement.getAttribute('data-theme') || 'dark'
 }
 
+/** Theme state shared by the header toggle and the Settings segmented control. */
 export function useTheme() {
   const [theme, setTheme] = useState(readTheme)
 
@@ -12,7 +13,7 @@ export function useTheme() {
     try {
       localStorage.setItem('tripopt_theme', theme)
     } catch {
-      
+      /* ignore */
     }
   }, [theme])
 

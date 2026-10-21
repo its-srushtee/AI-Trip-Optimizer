@@ -1,3 +1,8 @@
+/**
+ * Shared type shapes (documentation / editor IntelliSense).
+ * This is a JS project — these declarations are inert at runtime and exist
+ * purely to document the API contract the UI talks to.
+ */
 
 export interface Preferences {
   style: string

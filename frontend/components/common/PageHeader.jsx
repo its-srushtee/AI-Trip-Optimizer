@@ -5,8 +5,8 @@ import ThemeToggle from './ThemeToggle.jsx'
 
 export default function PageHeader({ back = '/dashboard', backLabel = 'Back', children }) {
   return (
-    <header className="border-b border-subtle" style={{ backgroundColor: 'var(--panel)' }}>
-      <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-5 py-3">
+    <header className="border-b" style={{ backgroundColor: 'var(--panel)', borderColor: 'var(--border)' }}>
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-5 py-3.5">
         <div className="flex items-center gap-4">
           <Logo size={26} />
           {back && (

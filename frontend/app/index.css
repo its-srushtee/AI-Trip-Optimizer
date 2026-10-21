@@ -1,118 +1,127 @@
 @import "tailwindcss";
 
 /* ============================================================
-   DESIGN SYSTEM — editorial travel
-   Photography-forward surfaces, one warm amber accent, a wide
-   display type scale. Dark base with a warm neutral light mode.
+   DESIGN SYSTEM — TripPlanner
+   Clean light-mode travel UI with blue/indigo accent palette
    ============================================================ */
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-display: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-
-  /* Radius — softer than before. Photo cards read as objects. */
+  --font-display: "Inter", ui-sans-serif, system-ui;
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
   --radius-2xl: 20px;
   --radius-3xl: 26px;
-
-  /* Type scale — now with real display sizes for hero + numbers. */
-  --text-xs: 0.75rem;      /* 12px  labels, meta */
-  --text-sm: 0.8125rem;    /* 13px  secondary body */
-  --text-base: 0.9375rem;  /* 15px  body, inputs, buttons */
-  --text-lg: 1.0625rem;    /* 17px  card titles */
-  --text-xl: 1.375rem;     /* 22px  section titles */
-  --text-2xl: 1.75rem;     /* 28px  page titles */
-  --text-3xl: 2.25rem;     /* 36px  stat / hero secondary */
-  --text-4xl: 3rem;        /* 48px  hero display */
-  --text-5xl: 4rem;        /* 64px  hero display large */
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-lg: 1.0625rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.25rem;
+  --text-4xl: 3rem;
+  --text-5xl: 4rem;
 }
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
-/* ---------- theme tokens ---------- */
+/* ---------- Light theme tokens (default) ---------- */
 :root {
-  color-scheme: dark;
-  --bg: #0b0c0e;
-  --panel: #141619;          /* raised card surface */
-  --surface: #141619;
-  --fill: #1c1f24;           /* inset / secondary fill */
-  --hover: #23272d;
-  --border: #25292f;
-  --border-strong: #3a4049;
-  --text: #eef1f5;
-  --text-2: #b8bfc9;
-  --text-3: #868e99;
-  --text-4: #656c76;
-  --input: #101215;
-
-  /* Cyan -> violet accent. The gradient is the brand signature; the flat
-     --accent is the cyan end, used for focus rings, links and small marks. */
-  --accent: #22d3ee;
-  --accent-hover: #38dcf4;
-  --accent-text: #4dd9ee;
-  --accent-ink: #06232b;     /* text sitting ON the bright accent */
-  --accent-soft: rgba(34, 211, 238, 0.13);
-  --accent-border: rgba(34, 211, 238, 0.42);
-  --grad-from: #22d3ee;
-  --grad-to: #7c3aed;
-  --grad: linear-gradient(90deg, #22d3ee 0%, #7c3aed 100%);
-  /* Buttons need white text to pass AA; the bright cyan above is only 1.8:1,
-     so interactive gradients start from a darker teal (5.4:1). */
-  --grad-btn: linear-gradient(90deg, #0e7490 0%, #6d28d9 100%);
-  --grad-btn-hover: linear-gradient(90deg, #12889f 0%, #7c3aed 100%);
-
-  --danger: #f87171;
-  --danger-soft: rgba(248, 113, 113, 0.12);
-  --danger-border: rgba(248, 113, 113, 0.32);
-  --warn: #fbbf24;
-  --warn-soft: rgba(251, 191, 36, 0.12);
-  --warn-border: rgba(251, 191, 36, 0.3);
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.3);
-}
-
-[data-theme="light"] {
   color-scheme: light;
-  --bg: #f5f6f8;             /* neutral paper — pairs with the cyan accent */
+  --bg: #f0f2f5;
   --panel: #ffffff;
   --surface: #ffffff;
-  --fill: #eef0f3;
-  --hover: #e5e8ec;
-  --border: #e0e3e8;
-  --border-strong: #c3c8d0;
-  --text: #14171c;
-  --text-2: #414750;
-  --text-3: #646b76;
-  --text-4: #8b929c;
+  --fill: #f5f7fa;
+  --hover: #eef1f6;
+  --border: #e4e8ef;
+  --border-strong: #c8d0dc;
+  --text: #0f1419;
+  --text-2: #374151;
+  --text-3: #6b7280;
+  --text-4: #9ca3af;
   --input: #ffffff;
 
-  --accent: #0e7490;         /* darkened cyan: passes 4.5:1 with white text */
-  --accent-hover: #155e75;
-  --accent-text: #0e7490;
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-text: #4f46e5;
   --accent-ink: #ffffff;
-  --accent-soft: rgba(14, 116, 144, 0.10);
-  --accent-border: rgba(14, 116, 144, 0.38);
-  --grad-from: #0891b2;
-  --grad-to: #6d28d9;
-  --grad: linear-gradient(90deg, #0891b2 0%, #6d28d9 100%);
-  --grad-btn: linear-gradient(90deg, #0e7490 0%, #6d28d9 100%);
-  --grad-btn-hover: linear-gradient(90deg, #0b5f77 0%, #5b21b6 100%);
+  --accent-soft: rgba(79, 70, 229, 0.08);
+  --accent-border: rgba(79, 70, 229, 0.25);
+  --grad-from: #4f46e5;
+  --grad-to: #7c3aed;
+  --grad: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  --grad-btn: linear-gradient(135deg, #4f46e5 0%, #6d28d9 100%);
+  --grad-btn-hover: linear-gradient(135deg, #4338ca 0%, #5b21b6 100%);
 
   --danger: #dc2626;
   --danger-soft: rgba(220, 38, 38, 0.07);
   --danger-border: rgba(220, 38, 38, 0.25);
-  --warn: #b45309;
-  --warn-soft: rgba(180, 83, 9, 0.08);
-  --warn-border: rgba(180, 83, 9, 0.22);
-  --shadow: 0 1px 2px rgba(27, 26, 23, 0.06);
-  --shadow-card: 0 4px 16px rgba(27, 26, 23, 0.08);
+  --warn: #d97706;
+  --warn-soft: rgba(217, 119, 6, 0.08);
+  --warn-border: rgba(217, 119, 6, 0.22);
+
+  --shadow: 0 1px 3px rgba(15, 20, 40, 0.06), 0 1px 2px rgba(15, 20, 40, 0.04);
+  --shadow-card: 0 4px 24px rgba(15, 20, 40, 0.08), 0 1px 4px rgba(15, 20, 40, 0.04);
+  --shadow-lg: 0 10px 40px rgba(15, 20, 40, 0.12);
+
+  --sidebar-bg: #ffffff;
+  --sidebar-width: 220px;
+  --sidebar-border: #e4e8ef;
+  --nav-active-bg: #eef1fd;
+  --nav-active-text: #4f46e5;
+  --nav-icon: #9ca3af;
+}
+
+/* ---------- Dark theme ---------- */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d0f14;
+  --panel: #161b25;
+  --surface: #161b25;
+  --fill: #1e2433;
+  --hover: #242b3d;
+  --border: #2a3245;
+  --border-strong: #374159;
+  --text: #e8ecf5;
+  --text-2: #b0bbd0;
+  --text-3: #7285a0;
+  --text-4: #526070;
+  --input: #161b25;
+
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --accent-text: #818cf8;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(99, 102, 241, 0.12);
+  --accent-border: rgba(99, 102, 241, 0.35);
+  --grad-from: #6366f1;
+  --grad-to: #8b5cf6;
+  --grad: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  --grad-btn: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  --grad-btn-hover: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+
+  --danger: #f87171;
+  --danger-soft: rgba(248, 113, 113, 0.10);
+  --danger-border: rgba(248, 113, 113, 0.28);
+  --warn: #fbbf24;
+  --warn-soft: rgba(251, 191, 36, 0.10);
+  --warn-border: rgba(251, 191, 36, 0.28);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.4);
+
+  --sidebar-bg: #161b25;
+  --sidebar-border: #2a3245;
+  --nav-active-bg: rgba(99, 102, 241, 0.14);
+  --nav-active-text: #818cf8;
+  --nav-icon: #526070;
 }
 
 html {
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
@@ -126,43 +135,68 @@ body {
 
 ::selection {
   background: var(--accent-soft);
+  color: var(--accent-text);
 }
 
-/* ---------- semantic text / surface helpers ---------- */
-.text-main  { color: var(--text); }
-.text-soft  { color: var(--text-2); }
-.text-mut   { color: var(--text-3); }
-.text-faint { color: var(--text-4); }
-.text-brand { color: var(--accent-text); }
+.text-main {
+  color: var(--text);
+}
 
-.bg-panel { background-color: var(--panel); }
-.bg-soft  { background-color: var(--fill); }
-.hv:hover { background-color: var(--hover); }
-.border-subtle { border-color: var(--border); }
-.border-strong { border-color: var(--border-strong); }
+.text-soft {
+  color: var(--text-2);
+}
 
-/* ---------- display type ---------- */
-/* Tight tracking at large sizes is what makes the inspo headlines
-   feel typeset rather than default. */
+.text-mut {
+  color: var(--text-3);
+}
+
+.text-faint {
+  color: var(--text-4);
+}
+
+.text-brand {
+  color: var(--accent-text);
+}
+
+.bg-panel {
+  background-color: var(--panel);
+}
+
+.bg-soft {
+  background-color: var(--fill);
+}
+
+.hv:hover {
+  background-color: var(--hover);
+}
+
+.border-subtle {
+  border-color: var(--border);
+}
+
+.border-strong {
+  border-color: var(--border-strong);
+}
+
 .display {
   font-weight: 700;
-  letter-spacing: -0.035em;
-  line-height: 1.02;
-}
-.display-sm {
-  font-weight: 700;
-  letter-spacing: -0.025em;
-  line-height: 1.12;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
 }
 
-/* ---------- cards ---------- */
+.display-sm {
+  font-weight: 700;
+  letter-spacing: -0.022em;
+  line-height: 1.14;
+}
+
 .card {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 16px;
+  box-shadow: var(--shadow);
 }
 
-/* Legacy aliases kept so existing markup keeps working. */
 .glass,
 .glass-strong {
   background: var(--panel);
@@ -172,14 +206,13 @@ body {
 .card-hover {
   transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
+
 .card-hover:hover {
   border-color: var(--border-strong);
   transform: translateY(-2px);
   box-shadow: var(--shadow-card);
 }
 
-/* Photo card — image is the surface, text sits in a gradient scrim.
-   The scrim is functional (legibility), not decorative. */
 .photo-card {
   position: relative;
   overflow: hidden;
@@ -187,28 +220,26 @@ body {
   background: var(--fill);
   isolation: isolate;
 }
+
 .photo-card img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.photo-card:hover img { transform: scale(1.045); }
+
+.photo-card:hover img {
+  transform: scale(1.045);
+}
+
 .scrim::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    to top,
-    rgba(0, 0, 0, 0.88) 0%,
-    rgba(0, 0, 0, 0.55) 32%,
-    rgba(0, 0, 0, 0.12) 62%,
-    rgba(0, 0, 0, 0) 100%
-  );
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.82) 0%, rgba(0, 0, 0, 0.48) 34%, rgba(0, 0, 0, 0.1) 64%, rgba(0, 0, 0, 0) 100%);
   pointer-events: none;
 }
 
-/* ---------- stat pairs (value over label, per inspo 1 & 3) ---------- */
 .stat-value {
   font-size: 1.0625rem;
   font-weight: 650;
@@ -216,24 +247,26 @@ body {
   color: var(--text);
   line-height: 1.2;
 }
+
 .stat-label {
   margin-top: 1px;
   font-size: 0.75rem;
   color: var(--text-3);
 }
 
-/* ---------- section heading ---------- */
 .section-title {
-  font-size: 1.375rem;
+  font-size: 1.25rem;
   font-weight: 700;
-  letter-spacing: -0.022em;
+  letter-spacing: -0.02em;
   color: var(--text);
 }
+
 .section-sub {
   margin-top: 3px;
   font-size: 0.875rem;
   color: var(--text-3);
 }
+
 .eyebrow {
   font-size: 0.6875rem;
   font-weight: 600;
@@ -242,31 +275,40 @@ body {
   color: var(--text-4);
 }
 
-/* ---------- form inputs ---------- */
 .input-field {
   width: 100%;
-  height: 46px;
+  height: 44px;
   background: var(--input);
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border);
   border-radius: 10px;
   padding: 0 0.875rem;
-  font-size: 0.9375rem;
+  font-size: 0.9rem;
   color: var(--text);
   outline: none;
-  transition: border-color 0.12s, box-shadow 0.12s;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  font-family: var(--font-sans);
+  box-sizing: border-box;
 }
-.input-field::placeholder { color: var(--text-4); }
+
+.input-field::placeholder {
+  color: var(--text-4);
+}
+
 .input-field:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
-textarea.input-field { height: auto; padding: 0.625rem 0.875rem; }
+
+textarea.input-field {
+  height: auto;
+  padding: 0.625rem 0.875rem;
+}
 
 .field-label {
   display: block;
-  margin-bottom: 0.4375rem;
+  margin-bottom: 0.375rem;
   font-size: 0.8125rem;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-2);
 }
 
@@ -276,38 +318,59 @@ input[type="range"] {
   height: 4px;
 }
 
-/* ---------- buttons ---------- */
-/* Amber pill = primary action, as in all three references. */
 .btn-accent {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  height: 46px;
+  height: 44px;
   padding: 0 1.5rem;
   border-radius: 999px;
   background: var(--accent);
-  color: var(--accent-ink);
-  font-size: 0.9375rem;
-  font-weight: 650;
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 600;
   letter-spacing: -0.01em;
   border: none;
-  transition: background-color 0.15s ease, transform 0.15s ease;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.28);
 }
-.btn-accent:hover:not(:disabled) { background: var(--accent-hover); }
 
-/* Gradient primary — the signature CTA (sign in / create account). */
+.btn-accent:hover:not(:disabled) {
+  background: var(--accent-hover);
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+}
+
+.btn-accent:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn-accent:disabled {
+  opacity: 0.5;
+}
+
 .btn-grad {
   background: var(--grad-btn);
   color: #fff;
   border: none;
-  transition: filter 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);
+  transition: filter 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
-.btn-grad:hover:not(:disabled) { background: var(--grad-btn-hover); }
-.btn-grad:active:not(:disabled) { transform: translateY(1px); }
-.btn-grad:disabled { opacity: 0.55; }
 
-/* Gradient text — used for the second line of the auth headline. */
+.btn-grad:hover:not(:disabled) {
+  background: var(--grad-btn-hover);
+  box-shadow: 0 4px 16px rgba(79, 70, 229, 0.35);
+}
+
+.btn-grad:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn-grad:disabled {
+  opacity: 0.55;
+}
+
 .text-grad {
   background: var(--grad);
   -webkit-background-clip: text;
@@ -315,64 +378,68 @@ input[type="range"] {
   color: transparent;
 }
 
-/* Gradient tile — logo mark. */
-.tile-grad { background: var(--grad); }
-.btn-accent:active:not(:disabled) { transform: translateY(1px); }
-.btn-accent:disabled { opacity: 0.5; }
+.tile-grad {
+  background: var(--grad-btn);
+}
 
 .btn-ghost {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  height: 40px;
+  height: 38px;
   padding: 0 1rem;
   border-radius: 999px;
   background: var(--fill);
   color: var(--text-2);
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border);
   font-size: 0.875rem;
-  font-weight: 550;
+  font-weight: 500;
   transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+  cursor: pointer;
 }
+
 .btn-ghost:hover {
   background: var(--hover);
   border-color: var(--border-strong);
   color: var(--text);
 }
 
-/* ---------- selectable chips ---------- */
 .chip-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  height: 38px;
-  border: 1px solid var(--border);
+  height: 36px;
+  border: 1.5px solid var(--border);
   background: var(--panel);
-  color: var(--text-2);
+  color: var(--text-3);
   border-radius: 999px;
-  padding: 0 0.9375rem;
-  font-size: 0.875rem;
+  padding: 0 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 500;
+  cursor: pointer;
   transition: border-color 0.12s, background-color 0.12s, color 0.12s;
 }
+
 .chip-btn:hover {
-  border-color: var(--border-strong);
-  background: var(--hover);
-}
-.chip-on {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-weight: 600;
-}
-.chip-on:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-  color: var(--accent-ink);
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--accent-text);
 }
 
-/* Read-only tag */
+.chip-on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.chip-on:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent-hover);
+  color: var(--accent-hover);
+}
+
 .tag {
   display: inline-flex;
   align-items: center;
@@ -380,12 +447,11 @@ input[type="range"] {
   background: var(--fill);
   color: var(--text-3);
   border-radius: 999px;
-  padding: 2px 9px;
+  padding: 2px 10px;
   font-size: 0.75rem;
   font-weight: 500;
 }
 
-/* Label floating over a photo (e.g. "98% match") */
 .tag-float {
   display: inline-flex;
   align-items: center;
@@ -394,25 +460,25 @@ input[type="range"] {
   padding: 5px 11px;
   font-size: 0.75rem;
   font-weight: 600;
-  background: rgba(10, 10, 12, 0.62);
+  background: rgba(10, 10, 12, 0.55);
   color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   backdrop-filter: blur(8px);
 }
 
-/* ---------- status pill ---------- */
 .status {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   border-radius: 999px;
-  padding: 3px 9px;
+  padding: 3px 10px;
   font-size: 0.6875rem;
   font-weight: 600;
   border: 1px solid var(--border);
   background: var(--fill);
-  color: var(--text-2);
+  color: var(--text-3);
 }
+
 .status::before {
   content: "";
   width: 5px;
@@ -421,41 +487,198 @@ input[type="range"] {
   background: currentColor;
 }
 
-/* ---------- alerts ---------- */
 .alert {
   border-radius: 10px;
   border: 1px solid;
   padding: 0.6875rem 0.875rem;
   font-size: 0.875rem;
 }
+
 .alert-error {
   border-color: var(--danger-border);
   background: var(--danger-soft);
   color: var(--danger);
 }
+
 .alert-warn {
   border-color: var(--warn-border);
   background: var(--warn-soft);
   color: var(--warn);
 }
 
-/* ---------- scrollbars ---------- */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  width: 100%;
+  border: none;
+  background: none;
+  text-align: left;
+}
+
+.nav-item:hover {
+  background: var(--fill);
+  color: var(--text-2);
+}
+
+.nav-item.active {
+  background: var(--nav-active-bg);
+  color: var(--nav-active-text);
+  font-weight: 600;
+}
+
+.tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1.5px solid var(--border);
+}
+
+.tab-item {
+  padding: 10px 16px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-3);
+  border-bottom: 2.5px solid transparent;
+  margin-bottom: -1.5px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.tab-item:hover {
+  color: var(--text-2);
+}
+
+.tab-item.active {
+  color: var(--accent-text);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.dest-card {
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.dest-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-card);
+}
+
+.dest-card-img {
+  width: 100%;
+  height: 130px;
+  object-fit: cover;
+}
+
+.dest-card-body {
+  padding: 10px 12px 12px;
+}
+
+.dest-card-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 2px;
+}
+
+.dest-card-sub {
+  font-size: 0.75rem;
+  color: var(--text-3);
+}
+
+.dest-card-rating {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #f59e0b;
+}
+
+.avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--grad-btn);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.step-badge {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  border: 2px solid var(--border);
+  background: var(--panel);
+  color: var(--text-3);
+  transition: all 0.2s ease;
+}
+
+.step-badge.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.step-badge.done {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.profile-photo {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--grad-btn);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 1.5rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
 }
-*::-webkit-scrollbar { width: 10px; height: 10px; }
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
 *::-webkit-scrollbar-thumb {
   background: var(--border-strong);
-  border-radius: 5px;
-  border: 3px solid transparent;
-  background-clip: content-box;
+  border-radius: 3px;
 }
-*::-webkit-scrollbar-track { background: transparent; }
 
-/* Horizontal snap rail (inspo 1 carousel) — phones only. From 640px up the
-   element becomes a normal grid, so this is scoped to a max-width query to
-   avoid fighting Tailwind's sm:grid on specificity. */
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 @media (max-width: 639px) {
   .rail {
     display: flex;
@@ -466,24 +689,55 @@ input[type="range"] {
     padding-bottom: 4px;
     -webkit-overflow-scrolling: touch;
   }
-  .rail::-webkit-scrollbar { display: none; }
-  .rail > * { scroll-snap-align: start; flex: 0 0 auto; }
+
+  .rail::-webkit-scrollbar {
+    display: none;
+  }
+
+  .rail>* {
+    scroll-snap-align: start;
+    flex: 0 0 auto;
+  }
 }
 
-/* ---------- responsive layout helpers ---------- */
-/* Main column clears the fixed bottom tab bar plus the iOS home indicator;
-   the reserve is dropped once the sidebar takes over at lg. */
 .main-pad {
   padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
 }
+
 @media (min-width: 1024px) {
-  .main-pad { padding-bottom: 0; }
+  .main-pad {
+    padding-bottom: 0;
+  }
 }
 
-/* Tap targets: 44px is the iOS/Android minimum. Applied on coarse pointers
-   only, so desktop keeps its tighter density. */
 @media (pointer: coarse) {
-  .chip-btn { height: 44px; padding: 0 1.125rem; }
-  .input-field { height: 48px; font-size: 16px; } /* 16px stops iOS zoom-on-focus */
-  .btn-accent { height: 50px; }
+  .chip-btn {
+    height: 44px;
+    padding: 0 1.125rem;
+  }
+
+  .input-field {
+    height: 48px;
+    font-size: 16px;
+  }
+
+  .btn-accent {
+    height: 50px;
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
 }

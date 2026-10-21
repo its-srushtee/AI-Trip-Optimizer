@@ -1,6 +1,11 @@
 import { Moon, Sun } from 'lucide-react'
 import { useTheme } from '../../hooks/useTheme.js'
 
+/**
+ * Icon button — used in headers / sidebars.
+ * `onDark` styles it for sitting on top of a photograph, where the themed
+ * panel/border tokens would disappear against the image.
+ */
 export default function ThemeToggle({ className = '', onDark = false }) {
   const { theme, toggle } = useTheme()
   const base = 'grid h-11 w-11 place-items-center rounded-full border transition-colors'
@@ -21,6 +26,7 @@ export default function ThemeToggle({ className = '', onDark = false }) {
   )
 }
 
+/** Segmented Dark / Light control — used inside Settings. */
 export function ThemeSegment({ className = '' }) {
   const { theme, setTheme } = useTheme()
   return (

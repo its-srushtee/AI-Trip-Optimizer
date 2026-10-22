@@ -31,6 +31,8 @@ export default function AuthCallback() {
         setToken(result.access_token)
         saveUser(result.user)
 
+        // We only need the Supabase session temporarily to bridge
+        // Google authentication into our existing FastAPI JWT system.
         await supabase.auth.signOut()
 
         navigate('/dashboard', { replace: true })

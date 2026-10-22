@@ -8,6 +8,12 @@ export const defaultPreferences = {
   food: 'No preference',
 }
 
+/**
+ * The 5 travel-preference questions as an editable form.
+ * Controlled component: `value` + `onChange(newValue)`.
+ * Used by the post-sign-in Complete Profile page and the Settings panel.
+ * (Not used during signup — account creation collects basics only.)
+ */
 export default function PreferencesEditor({ value, onChange }) {
   const v = { ...defaultPreferences, ...(value || {}) }
   const set = (key, val) => onChange({ ...v, [key]: val })

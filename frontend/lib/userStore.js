@@ -1,4 +1,5 @@
-
+// Tiny mock user store (UI-only demo). When the real backend lands, replace
+// this with the JWT session described in README.md / src/lib/api.js.
 const KEY = 'tripopt_user'
 
 export function saveUser(user) {

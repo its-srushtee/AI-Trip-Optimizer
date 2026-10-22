@@ -6,6 +6,7 @@ import Dashboard from './dashboard.jsx'
 import CompleteProfile from './complete-profile.jsx'
 import CreateTrip from './create-trip.jsx'
 import Trips from './trips.jsx'
+import TripDetails from './trip-details.jsx'
 import { getToken } from '../services/api.js'
 
 import AuthCallback from './auth-callback.jsx'
@@ -79,8 +80,17 @@ export default function App() {
             </RequireAuth>
           }
         />
+        <Route
+          path="/trips/:id"
+          element={
+            <RequireAuth>
+              <TripDetails />
+            </RequireAuth>
+          }
+        />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Route>
     </Routes>
   )
 }
+

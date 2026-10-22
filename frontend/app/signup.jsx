@@ -8,6 +8,10 @@ import { User, Mail, Lock } from 'lucide-react'
 import { api, setToken } from '../services/api.js'
 import { saveUser } from '../lib/userStore.js'
 
+/**
+ * Account creation only — basic details, nothing else.
+ * Travel preferences are collected after sign-in on /complete-profile.
+ */
 export default function Signup() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)

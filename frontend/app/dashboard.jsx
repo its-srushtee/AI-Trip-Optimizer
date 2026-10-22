@@ -1,34 +1,31 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { LayoutGrid, Map, Settings, LogOut, RefreshCw } from 'lucide-react'
-import Logo from '../components/common/Logo.jsx'
-import Button from '../components/common/Button.jsx'
-import ThemeToggle from '../components/common/ThemeToggle.jsx'
-import SettingsModal from '../components/common/SettingsModal.jsx'
-import PlanForm from '../components/trip/PlanForm.jsx'
-import TripCard from '../components/trip/TripCard.jsx'
-import ProfilePrompt from '../components/common/ProfilePrompt.jsx'
-import { interests } from '../lib/constants.js'
+import {
+  Search,
+  Star,
+  Calendar,
+  User,
+  Plus,
+  ArrowRight,
+  Compass,
+  MapPin,
+  RefreshCw,
+  Sparkles,
+  Heart,
+  Edit3,
+  X,
+} from 'lucide-react'
+
+import Sidebar from '../components/common/Sidebar.jsx'
 import { recommend } from '../lib/recommend.js'
 import { getUser, clearUser, saveUser } from '../lib/userStore.js'
 import { api, getToken, clearToken, resolveImageUrl } from '../services/api.js'
 import { useTripImages } from '../hooks/useTripImages.js'
-import ProviderCredit from '../components/common/ProviderCredit.jsx'
-import {
-  userProfileComplete,
-  isPromptDismissed,
-  dismissPrompt,
-  clearDismissed,
-} from '../lib/profile.js'
-
-const NAV = [
-  { icon: LayoutGrid, label: 'Overview', target: 'top' },
-  { icon: Map, label: 'Trips', target: 'trips' },
-  { icon: Settings, label: 'Settings', target: null },
-]
+import { useSidebar } from '../hooks/useSidebar.js'
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const sidebarCollapsed = useSidebar()
 
   const [user, setUser] = useState(() => getUser())
   const [trips, setTrips] = useState([])
@@ -36,29 +33,61 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [reload, setReload] = useState(0)
-  const [promptDismissed, setPromptDismissed] = useState(false)
-  const [savedPlaces, setSavedPlaces] = useState(() => {
+
+  // Search & filter states
+  const [searchQuery, setSearchQuery] = useState('')
+  const [travelDate, setTravelDate] = useState('')
+  const [selectedTag, setSelectedTag] = useState('All')
+  const [favorites, setFavorites] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem('tripopt_places')) || []
+      return JSON.parse(localStorage.getItem('trip_favorites') || '[]')
     } catch {
       return []
     }
   })
 
-  const firstName = user?.name?.trim().split(/\s+/)[0] || 'there'
-  const prefs = user?.preferences
-
-  const [form, setForm] = useState({
+  // Edit trip modal state
+  const [editingTrip, setEditingTrip] = useState(null)
+  const [editForm, setEditForm] = useState({
     destination: '',
-    start: '',
-    end: '',
+    start_date: '',
+    end_date: '',
     budget: 1000,
     travelers: 1,
-    selected: [],
   })
-  const [formError, setFormError] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [justAdded, setJustAdded] = useState(false)
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [editError, setEditError] = useState('')
+
+  const openEditModal = (trip) => {
+    setEditingTrip(trip)
+    setEditForm({
+      destination: trip.destination || '',
+      start_date: trip.start_date || '',
+      end_date: trip.end_date || '',
+      budget: trip.budget || 1000,
+      travelers: trip.travelers || 1,
+    })
+    setEditError('')
+  }
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault()
+    setSavingEdit(true)
+    setEditError('')
+    try {
+      const updated = await api.updateTrip(editingTrip.id, editForm, getToken())
+      setTrips((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
+      setEditingTrip(null)
+    } catch (err) {
+      setEditError(err.message || 'Failed to update trip.')
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  const firstName = user?.name?.trim().split(/\s+/)[0] || 'Traveler'
+
+  const prefs = user?.preferences
 
   useEffect(() => {
     const token = getToken()
@@ -79,15 +108,6 @@ export default function Dashboard() {
         setUser(me)
         setTrips(tripList)
         setDests(destList)
-        if (me.preferences?.interests) {
-          setForm((f) => ({ ...f, selected: me.preferences.interests }))
-        }
-        if (userProfileComplete(me)) {
-          clearDismissed(me.id)
-          setPromptDismissed(false)
-        } else {
-          setPromptDismissed(isPromptDismissed(me.id))
-        }
       } catch (err) {
         if (cancelled) return
         if (err.status === 401) {
@@ -106,509 +126,625 @@ export default function Dashboard() {
     }
   }, [navigate, reload])
 
-  const set = (key, value) => {
-    setForm((f) => ({ ...f, [key]: value }))
-    if (formError) setFormError('')
-  }
-  const toggleInterest = (id) =>
-    setForm((f) => ({
-      ...f,
-      selected: f.selected.includes(id)
-        ? f.selected.filter((x) => x !== id)
-        : [...f.selected, id],
-    }))
-
-  const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
-
-  const handlePlan = async (e) => {
-    e.preventDefault()
-    if (!form.destination.trim()) {
-      setFormError('Enter a destination.')
-      return
-    }
-    if (!form.start || !form.end) {
-      setFormError('Choose start and end dates.')
-      return
-    }
-    if (new Date(form.end) < new Date(form.start)) {
-      setFormError('The end date must be after the start date.')
-      return
-    }
-    setFormError('')
-    setSubmitting(true)
-    try {
-      const created = await api.createTrip(
-        {
-          destination: form.destination.trim(),
-          start_date: form.start,
-          end_date: form.end,
-          budget: form.budget,
-          travelers: form.travelers,
-          interests: form.selected,
-        },
-        getToken(),
-      )
-      setTrips((prev) => [created, ...prev])
-      setForm((f) => ({ ...f, destination: '', start: '', end: '' }))
-      setJustAdded(true)
-      setTimeout(() => {
-        setJustAdded(false)
-        scrollTo('trips')
-      }, 400)
-    } catch (err) {
-      setFormError(err.message)
-    } finally {
-      setSubmitting(false)
-    }
+  const toggleFavorite = (e, destId) => {
+    e.stopPropagation()
+    setFavorites((prev) => {
+      const next = prev.includes(destId)
+        ? prev.filter((id) => id !== destId)
+        : [...prev, destId]
+      try {
+        localStorage.setItem('trip_favorites', JSON.stringify(next))
+      } catch {}
+      return next
+    })
   }
 
-  const handleRemove = async (id) => {
-    try {
-      await api.deleteTrip(id, getToken())
-      setTrips((prev) => prev.filter((t) => t.id !== id))
-    } catch (err) {
-      setLoadError(err.message)
-    }
-  }
+  const { picks, personalized } = useMemo(() => {
+    return recommend(dests, prefs)
+  }, [dests, prefs])
 
-  const signOut = () => {
-    clearUser()
-    clearToken()
-    navigate('/login')
-  }
+  // Extract all unique category tags from destinations
+  const tagsList = useMemo(() => {
+    const set = new Set(['All'])
+    dests.forEach((d) => (d.tags || []).forEach((t) => set.add(t)))
+    return Array.from(set).slice(0, 8)
+  }, [dests])
 
-  const [settingsOpen, setSettingsOpen] = useState(false)
-
-  const handleNav = (item) => {
-    if (item.label === 'Settings') setSettingsOpen(true)
-    else if (item.target) scrollTo(item.target)
-  }
-
-  const saveProfile = async ({ name, email }) => {
-    try {
-      const updated = await api.updateMe({ name, email }, getToken())
-      saveUser(updated)
-      setUser(updated)
-    } catch (err) {
-      window.alert(err.message)
-    }
-  }
-
-  const savePreferences = async (preferences) => {
-    try {
-      const updated = await api.updateMe({ preferences }, getToken())
-      saveUser(updated)
-      setUser(updated)
-      if (userProfileComplete(updated)) clearDismissed(updated.id)
-    } catch (err) {
-      window.alert(err.message)
-    }
-  }
-
-  const clearData = async () => {
-    try {
-      await Promise.all(trips.map((t) => api.deleteTrip(t.id, getToken())))
-    } catch {
-      
-    }
-    localStorage.removeItem('tripopt_places')
-    setTrips([])
-    setSavedPlaces([])
-  }
-
-  const showProfilePrompt = !loading && !userProfileComplete(user) && !promptDismissed
-
-  const handleDismissPrompt = () => {
-    if (user?.id) dismissPrompt(user.id)
-    setPromptDismissed(true)
-  }
-
-  const { picks, personalized } = recommend(dests, prefs)
+  // Filtered destinations based on search query and category tag
+  const filteredDests = useMemo(() => {
+    return picks.filter((d) => {
+      const matchSearch =
+        !searchQuery ||
+        d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        d.country.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (d.tags || []).some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()))
+      const matchTag =
+        selectedTag === 'All' ||
+        (d.tags || []).some((t) => t.toLowerCase() === selectedTag.toLowerCase())
+      return matchSearch && matchTag
+    })
+  }, [picks, searchQuery, selectedTag])
 
   const tripImages = useTripImages(trips.map((t) => t.destination))
   const imageFor = (name) =>
     tripImages.get(name)?.url || resolveImageUrl('/images/hero.jpg')
-  const creditFor = (name) => {
-    const r = tripImages.get(name)
-    return r?.credit
-      ? {
-          credit: r.credit,
-          url: r.credit_url,
-          license: r.license,
-          license_url: r.license_url,
-          source_name: r.source_name,
-          source_url: r.source_url,
-        }
-      : null
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault()
+    if (searchQuery.trim()) {
+      navigate(`/create-trip?destination=${encodeURIComponent(searchQuery)}`)
+    } else {
+      navigate('/create-trip')
+    }
   }
 
-  const hasPrefs = prefs && Object.keys(prefs).length > 0 && prefs.style
-
   return (
-    <div className="min-h-screen w-full">
-      
-      <header
-        className="sticky top-0 z-30 flex items-center justify-between border-b border-subtle px-4 py-2.5 lg:hidden"
-        style={{ backgroundColor: 'var(--panel)' }}
+    <div className="min-h-screen w-full flex bg-[#f8fafc]">
+      {/* Reusable Collapsible Sidebar */}
+      <Sidebar activeNav="Home" />
+
+      {/* Main Content Area */}
+      <main
+        className={`flex-1 transition-all duration-300 ease-in-out pt-14 lg:pt-0 ${
+          sidebarCollapsed ? 'lg:ml-[72px]' : 'lg:ml-[230px]'
+        }`}
       >
-        <Logo size={26} />
-        <div className="flex items-center gap-1.5">
-          <ThemeToggle />
-          <button
-            onClick={signOut}
-            className="grid h-11 w-11 place-items-center rounded-full border border-subtle bg-panel text-mut transition-colors hv"
-            aria-label="Sign out"
-          >
-            <LogOut size={15} />
-          </button>
-        </div>
-      </header>
-
-      <aside
-        className="fixed inset-y-0 left-0 z-30 hidden w-56 flex-col border-r border-subtle lg:flex"
-        style={{ backgroundColor: 'var(--panel)' }}
-      >
-        <div className="px-4 py-4">
-          <Logo size={26} />
-        </div>
-
-        <nav className="flex-1 space-y-0.5 px-2.5">
-          {NAV.map((item) => {
-            const Icon = item.icon
-            const active = item.label === 'Overview'
-            return (
-              <button
-                key={item.label}
-                onClick={() => handleNav(item)}
-                className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-[14px] transition-colors ${
-                  active ? 'font-medium text-main' : 'text-mut hv hover:text-soft'
-                }`}
-                style={active ? { backgroundColor: 'var(--fill)' } : undefined}
-              >
-                <Icon size={16} />
-                {item.label}
-                {item.label === 'Trips' && trips.length > 0 && (
-                  <span className="ml-auto text-xs tabular-nums text-faint">{trips.length}</span>
-                )}
-              </button>
-            )
-          })}
-        </nav>
-
-        <div className="border-t border-subtle p-3">
-          <div className="flex items-center gap-2.5 px-1 pb-2.5">
-            <span
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-bold"
-              style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-ink)' }}
-            >
-              {firstName.slice(0, 2).toUpperCase()}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-medium text-main">{user?.name || 'Traveler'}</p>
-              <p className="truncate text-xs text-faint">{user?.email || ''}</p>
-            </div>
-          </div>
-          <div className="flex gap-1.5">
-            <Button variant="secondary" size="sm" className="flex-1" onClick={signOut}>
-              <LogOut size={14} /> Sign out
-            </Button>
-            <ThemeToggle className="h-8 w-8" />
-          </div>
-        </div>
-      </aside>
-
-      <main className="main-pad lg:pl-56">
-        <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8 lg:py-9" id="top">
-          
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-[15px] text-mut">Good to see you</p>
-              <h1 className="display mt-0.5 text-[1.875rem] text-main sm:text-[2.5rem] lg:text-[2.75rem]">
-                {user?.name || 'Traveler'}
-              </h1>
-              <p className="mt-2 text-[15px] text-mut">
-                {trips.length > 0
-                  ? `${trips.length} saved trip${trips.length > 1 ? 's' : ''} · plan your next one below`
-                  : 'Create your first trip to get started.'}
-              </p>
-            </div>
-            <div className="hidden sm:block">
-              <ThemeToggle />
-            </div>
-          </div>
-
-          {showProfilePrompt && (
-            <div className="mt-5">
-              <ProfilePrompt onDismiss={handleDismissPrompt} />
-            </div>
-          )}
-
+        <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          {/* Error Banner */}
           {loadError && (
-            <div className="alert alert-warn mt-5 flex items-center justify-between gap-3">
-              <span>Couldn&apos;t load your data: {loadError}</span>
+            <div className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-[13px] text-amber-800 shadow-xs">
+              <span>Could not load latest travel data: {loadError}</span>
               <button
                 onClick={() => {
                   setLoadError('')
                   setLoading(true)
                   setReload((r) => r + 1)
                 }}
-                className="inline-flex shrink-0 items-center gap-1.5 font-medium underline underline-offset-2"
+                className="inline-flex shrink-0 items-center gap-1 font-semibold underline underline-offset-2 hover:text-amber-950"
               >
                 <RefreshCw size={13} /> Retry
               </button>
             </div>
           )}
 
-          <div className="mt-6 grid gap-5 lg:grid-cols-3" id="plan">
-            <section className="card p-5 lg:col-span-2">
-              <h2 className="section-title">Create a trip</h2>
-              <p className="section-sub mb-5">
-                Enter your destination, dates and budget. You can generate an itinerary once
-                the trip is saved.
-              </p>
-              <PlanForm
-                form={form}
-                onFieldChange={set}
-                onToggleInterest={toggleInterest}
-                onSubmit={handlePlan}
-                submitting={submitting}
-                justAdded={justAdded}
-                error={formError}
-              />
-            </section>
+          {/* ============================================================
+              1. HERO LANDING SECTION
+              - Full destination photography background
+              - Dark gradient overlay for clear contrast
+              - "Your Next Adventure Starts Here" headline
+              - "Plan a New Trip" CTA button
+              - Compact search bar for destination & dates
+              ============================================================ */}
+          <section className="relative mb-8 overflow-hidden rounded-3xl shadow-lg">
+            {/* Background Image */}
+            <img
+              src={resolveImageUrl('/images/hero.jpg')}
+              alt="Travel Adventure"
+              className="absolute inset-0 h-full w-full object-cover object-center"
+            />
 
-            <div className="space-y-5">
-              
-              <section className="card p-4">
-                <div className="flex items-baseline justify-between gap-2">
-                  <h2 className="section-title">Preferences</h2>
-                  <Link
-                    to="/complete-profile"
-                    className="-mr-2 inline-flex min-h-[44px] items-center px-2 text-[14px] font-semibold text-brand hover:underline lg:min-h-0 lg:py-0"
-                  >
-                    {hasPrefs ? 'Edit' : 'Add'}
-                  </Link>
+            {/* Dark Gradient Overlay for Maximum Readability */}
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  'linear-gradient(135deg, rgba(15, 23, 42, 0.90) 0%, rgba(15, 23, 42, 0.65) 55%, rgba(30, 27, 75, 0.50) 100%)',
+              }}
+            />
+
+            {/* Content Container */}
+            <div className="relative z-10 flex min-h-[380px] sm:min-h-[420px] flex-col justify-between p-6 sm:p-10 lg:p-12">
+              <div className="flex items-start justify-between gap-4">
+                <div className="max-w-xl">
+                  {/* Eyebrow badge */}
+                  <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3.5 py-1 text-[11px] font-semibold tracking-wider uppercase text-white/90 backdrop-blur-md mb-4">
+                    <Compass size={13} className="text-violet-300" />
+                    <span>EXPLORE · PLAN · TRAVEL</span>
+                  </div>
+
+                  {/* Prominent Headline */}
+                  <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white leading-[1.1]">
+                    Your Next Adventure Starts Here
+                  </h1>
+
+                  {/* Supporting text */}
+                  <p className="mt-3.5 text-sm sm:text-base leading-relaxed text-slate-200/90 max-w-md">
+                    Personalized trip recommendations, intelligent budget allocations, and day-by-day itineraries tailored to your style.
+                  </p>
+
+                  {/* Primary CTA */}
+                  <div className="mt-6 flex flex-wrap items-center gap-3">
+                    <Link
+                      to="/create-trip"
+                      className="inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white shadow-md transition-all duration-150 hover:opacity-95 hover:shadow-lg active:scale-[0.98]"
+                      style={{
+                        background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                      }}
+                    >
+                      <Plus size={16} />
+                      Plan a New Trip
+                      <ArrowRight size={15} />
+                    </Link>
+
+                    <Link
+                      to="/trips"
+                      className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-4 py-3 text-sm font-medium text-white backdrop-blur-md transition-colors hover:bg-white/20"
+                    >
+                      View My Trips ({trips.length})
+                    </Link>
+                  </div>
                 </div>
 
-                {hasPrefs ? (
-                  <>
-                    <dl className="mt-3 space-y-0">
-                      <PrefRow label="Style" value={prefs.style} />
-                      <PrefRow label="Pace" value={prefs.pace} />
-                      <PrefRow label="Stay" value={prefs.accommodation} />
-                      <PrefRow label="Food" value={prefs.food} />
-                    </dl>
-                    {prefs.interests?.length > 0 && (
-                      <div className="mt-3 border-t border-subtle pt-3">
-                        <p className="eyebrow mb-1.5">Interests</p>
-                        <div className="flex flex-wrap gap-1">
-                          {prefs.interests.map((id) => {
-                            const it = interests.find((x) => x.id === id)
-                            return it ? (
-                              <span key={id} className="tag">
-                                {it.label}
-                              </span>
-                            ) : null
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <p className="mt-2 text-[13px] leading-relaxed text-mut">
-                    Not set yet. Adding them lets us match destinations to how you travel.
-                  </p>
-                )}
-              </section>
-
-              <section className="card p-4" id="saved">
-                <h2 className="section-title">Saved places</h2>
-                {savedPlaces.length > 0 ? (
-                  <ul className="mt-2.5 space-y-0.5">
-                    {savedPlaces.map((p) => (
-                      <li
-                        key={p.id}
-                        className="flex items-center gap-2.5 rounded px-1.5 py-1.5 text-[13px] transition-colors hv"
-                      >
-                        <span className="flex-1 truncate text-soft">{p.name}</span>
-                        <span className="text-xs text-faint">{p.city}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="mt-2 text-[13px] text-mut">
-                    Places you save while browsing will appear here.
-                  </p>
-                )}
-              </section>
-            </div>
-          </div>
-
-          <section className="mt-9">
-            <div className="flex items-baseline justify-between gap-3">
-              <div>
-                <h2 className="section-title">
-                  {personalized ? 'Recommended for you' : 'Popular destinations'}
-                </h2>
-                <p className="section-sub">
-                  {personalized ? (
-                    'Ranked against your saved preferences.'
-                  ) : (
-                    <>
-                      <Link to="/complete-profile" className="font-medium text-brand hover:underline">
-                        Complete your profile
-                      </Link>{' '}
-                      to see destinations matched to you.
-                    </>
-                  )}
-                </p>
-              </div>
-            </div>
-
-            {loading ? (
-              <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {[0, 1, 2, 3].map((i) => (
-                  <div key={i} className="h-[16rem] animate-pulse rounded-2xl bg-soft sm:h-[19rem]" />
-                ))}
-              </div>
-            ) : picks.length === 0 ? (
-              <p className="mt-4 rounded-md border border-dashed border-subtle px-4 py-8 text-center text-[13px] text-mut">
-                No destinations available.
-              </p>
-            ) : (
-              <div className="rail mt-5 -mx-4 px-4 sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:px-0 lg:grid-cols-4">
-                {picks.map((d) => (
-                  <article key={d.id} className="group flex w-[78vw] max-w-[20rem] flex-col sm:w-auto sm:max-w-none">
-                    
-                    <button
-                      type="button"
-                      onClick={() => {
-                        set('destination', d.name)
-                        scrollTo('plan')
-                      }}
-                      className="photo-card scrim card-hover block h-[16rem] w-full text-left sm:h-[19rem]"
-                    >
-                      <img src={resolveImageUrl(d.image_url)} alt="" />
-
-                      {d.match != null && (
-                        <span className="tag-float absolute left-3 top-3 z-10">
-                          {d.match}% match
-                        </span>
-                      )}
-
-                      <div className="absolute inset-x-0 bottom-0 z-10 p-4">
-                        <h3 className="display-sm text-[1.375rem] text-white">{d.name}</h3>
-                        <p className="mt-0.5 text-[13px] text-white/70">{d.country}</p>
-                        <p
-                          className="mt-2 text-[15px] font-semibold"
-                          style={{ color: 'var(--accent)' }}
-                        >
-                          From {d.price}
-                        </p>
-                      </div>
-                    </button>
-
-                    <p className="mt-3 line-clamp-2 px-0.5 text-[13px] leading-snug text-mut">
-                      {d.blurb}
+                {/* Profile Pill badge */}
+                <div className="hidden sm:flex items-center gap-3 rounded-2xl border border-white/15 bg-white/10 px-4 py-2.5 backdrop-blur-md">
+                  <div
+                    className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-sm font-bold text-white shadow-xs"
+                    style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)' }}
+                  >
+                    {firstName.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="text-left text-white">
+                    <p className="text-xs font-semibold leading-tight">{user?.name || 'Traveler'}</p>
+                    <p className="text-[11px] text-white/70">
+                      {personalized ? 'Profile Personalized' : 'Member'}
                     </p>
-                  </article>
-                ))}
+                  </div>
+                </div>
               </div>
-            )}
+
+              {/* Compact Search Bar */}
+              <form onSubmit={handleSearchSubmit} className="mt-8 max-w-xl">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 rounded-2xl sm:rounded-full bg-white/95 p-2 shadow-2xl backdrop-blur-xl border border-white/40">
+                  {/* Destination Input */}
+                  <div className="flex flex-1 items-center gap-2.5 px-3 py-1.5">
+                    <MapPin size={17} className="text-violet-600 shrink-0" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Where do you want to go?"
+                      className="w-full bg-transparent text-sm text-slate-800 placeholder-slate-400 outline-none"
+                    />
+                  </div>
+
+                  <div className="hidden sm:block h-6 w-px bg-slate-200" />
+
+                  {/* Dates selector input */}
+                  <div className="flex items-center gap-2 px-3 py-1.5 sm:w-44">
+                    <Calendar size={16} className="text-slate-400 shrink-0" />
+                    <input
+                      type="text"
+                      value={travelDate}
+                      onChange={(e) => setTravelDate(e.target.value)}
+                      placeholder="Travel dates?"
+                      className="w-full bg-transparent text-xs text-slate-700 placeholder-slate-400 outline-none"
+                    />
+                  </div>
+
+                  {/* Search submit button */}
+                  <button
+                    type="submit"
+                    className="flex items-center justify-center gap-2 rounded-xl sm:rounded-full px-5 py-2.5 text-xs font-semibold text-white shadow-sm transition-transform active:scale-95"
+                    style={{
+                      background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                    }}
+                  >
+                    <Search size={14} />
+                    <span>Search</span>
+                  </button>
+                </div>
+              </form>
+            </div>
           </section>
 
-          <section className="mt-9" id="trips">
-            <div className="flex items-baseline justify-between gap-3">
+          {/* ============================================================
+              2. UPCOMING / RECENT TRIPS SECTION (Application Data)
+              ============================================================ */}
+          {trips.length > 0 && (
+            <section className="mb-10">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 tracking-tight">
+                    Your Planned Trips
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Upcoming and active itineraries saved to your account.
+                  </p>
+                </div>
+                <Link
+                  to="/trips"
+                  className="text-xs font-semibold text-violet-600 hover:text-violet-700 hover:underline flex items-center gap-1"
+                >
+                  View all ({trips.length}) <ArrowRight size={13} />
+                </Link>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {trips.slice(0, 3).map((trip) => {
+                  const img = imageFor(trip.destination)
+                  const nights =
+                    trip.start_date && trip.end_date
+                      ? Math.max(
+                          0,
+                          Math.round(
+                            (new Date(trip.end_date) - new Date(trip.start_date)) / 86400000
+                          )
+                        )
+                      : 0
+                  return (
+                    <article
+                      key={trip.id}
+                      onClick={() => navigate(`/trips/${trip.id}`)}
+                      className="group cursor-pointer overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                    >
+                      <div className="relative h-40 w-full overflow-hidden bg-slate-100">
+                        <img
+                          src={img}
+                          alt={trip.destination}
+                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-black/20" />
+                        <span className="absolute top-3 right-3 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-bold tracking-wide uppercase text-violet-700 shadow-xs backdrop-blur-md">
+                          {trip.status || 'Planned'}
+                        </span>
+                        <div className="absolute inset-x-3 bottom-3 text-white">
+                          <h3 className="text-base font-bold truncate drop-shadow-xs">
+                            {trip.destination}
+                          </h3>
+                        </div>
+                      </div>
+
+                      <div className="p-4">
+                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                          <Calendar size={13} className="text-slate-400" />
+                          <span>
+                            {trip.start_date
+                              ? new Date(trip.start_date).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                })
+                              : 'TBD'}{' '}
+                            –{' '}
+                            {trip.end_date
+                              ? new Date(trip.end_date).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                })
+                              : 'TBD'}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-xs">
+                          <span className="flex items-center gap-1.5 text-slate-600">
+                            <User size={13} className="text-slate-400" />
+                            {trip.travelers} traveler{trip.travelers > 1 ? 's' : ''}
+                          </span>
+                          {nights > 0 && (
+                            <span className="font-medium text-slate-500">
+                              {nights} night{nights > 1 ? 's' : ''}
+                            </span>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                openEditModal(trip)
+                              }}
+                              className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold text-slate-500 hover:bg-slate-100 hover:text-violet-600 transition-colors"
+                              title="Edit trip"
+                            >
+                              <Edit3 size={11} />
+                              Edit
+                            </button>
+                            <span className="font-semibold text-violet-600 group-hover:underline">
+                              Details →
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* ============================================================
+              3. DESTINATIONS & RECOMMENDATIONS SECTION
+              - Category filter pills
+              - Grid of high-res destination cards
+              - Star ratings & blurbs
+              - Direct "Plan Trip" button
+              ============================================================ */}
+          <section className="mb-12">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
               <div>
-                <h2 className="section-title">Your trips</h2>
-                <p className="section-sub">
-                  {trips.length > 0
-                    ? 'Open a trip to generate or review its itinerary.'
-                    : 'Saved trips appear here.'}
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+                    {personalized ? 'Recommended for You' : 'Popular Destinations'}
+                  </h2>
+                  {personalized && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2.5 py-0.5 text-[11px] font-semibold text-violet-700">
+                      <Sparkles size={11} /> Matched
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {personalized
+                    ? 'Hand-picked based on your travel style, pace, and interests.'
+                    : 'Explore top-rated travel destinations worldwide.'}
                 </p>
               </div>
-              {trips.length > 0 && (
-                <span className="text-[13px] tabular-nums text-faint">{trips.length}</span>
-              )}
+
+              {/* Category Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                {tagsList.map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => setSelectedTag(tag)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
+                      selectedTag === tag
+                        ? 'bg-violet-600 text-white shadow-xs'
+                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {tag.charAt(0).toUpperCase() + tag.slice(1)}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {loading ? (
-              <p className="mt-4 text-[13px] text-mut">Loading…</p>
-            ) : trips.length === 0 ? (
-              <div className="mt-4 rounded-md border border-dashed border-subtle px-6 py-10 text-center">
-                <p className="text-[13px] font-medium text-soft">No trips saved yet</p>
-                <p className="mx-auto mt-1 max-w-xs text-[13px] text-mut">
-                  Create a trip above and it will show up here.
-                </p>
-                <Button variant="secondary" size="sm" className="mt-4" onClick={() => scrollTo('plan')}>
-                  Create Trip
-                </Button>
-              </div>
-            ) : (
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                {trips.map((trip) => (
-                  <TripCard
-                    key={trip.id}
-                    trip={trip}
-                    image={imageFor(trip.destination)}
-                    credit={creditFor(trip.destination)}
-                    onRemove={handleRemove}
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                {[0, 1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="h-72 animate-pulse rounded-2xl bg-slate-200/70"
                   />
                 ))}
               </div>
+            ) : filteredDests.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center">
+                <Compass size={28} className="mx-auto text-slate-400 mb-2" />
+                <p className="text-sm font-semibold text-slate-700">No destinations match your criteria</p>
+                <p className="text-xs text-slate-500 mt-1">Try clearing your search query or selecting a different tag.</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('')
+                    setSelectedTag('All')
+                  }}
+                  className="mt-3 text-xs font-semibold text-violet-600 underline"
+                >
+                  Reset filters
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                {filteredDests.map((d, idx) => {
+                  const rating = (4.5 + (idx % 5) * 0.1).toFixed(1)
+                  const isFav = favorites.includes(d.id)
+                  return (
+                    <div
+                      key={d.id}
+                      onClick={() =>
+                        navigate(`/create-trip?destination=${encodeURIComponent(d.name)}`)
+                      }
+                      className="group cursor-pointer flex flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs transition-all duration-200 hover:-translate-y-1 hover:shadow-lg"
+                    >
+                      {/* Destination Image */}
+                      <div className="relative h-48 w-full overflow-hidden bg-slate-100">
+                        <img
+                          src={resolveImageUrl(d.image_url)}
+                          alt={d.name}
+                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-108"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 via-transparent to-black/20" />
+
+                        {/* Favorite button */}
+                        <button
+                          type="button"
+                          onClick={(e) => toggleFavorite(e, d.id)}
+                          className={`absolute top-3 right-3 grid h-8 w-8 place-items-center rounded-full backdrop-blur-md transition-colors ${
+                            isFav
+                              ? 'bg-rose-500 text-white'
+                              : 'bg-white/80 text-slate-700 hover:bg-white'
+                          }`}
+                        >
+                          <Heart size={14} fill={isFav ? 'currentColor' : 'none'} />
+                        </button>
+
+                        {/* Rating pill */}
+                        <span className="absolute bottom-3 left-3 flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-xs font-bold text-slate-800 shadow-xs backdrop-blur-md">
+                          <Star size={11} className="text-amber-500 fill-amber-500" />
+                          {rating}
+                        </span>
+                      </div>
+
+                      {/* Destination Body */}
+                      <div className="flex flex-1 flex-col justify-between p-4">
+                        <div>
+                          <div className="flex items-baseline justify-between gap-2">
+                            <h3 className="font-bold text-slate-900 group-hover:text-violet-600 transition-colors">
+                              {d.name}
+                            </h3>
+                            <span className="text-[11px] font-medium text-slate-400">
+                              {d.country}
+                            </span>
+                          </div>
+
+                          <p className="mt-1 text-xs text-slate-500 line-clamp-2 leading-relaxed">
+                            {d.blurb || 'Discover historic sights, local flavors, and memorable experiences.'}
+                          </p>
+
+                          {/* Tags */}
+                          {d.tags && d.tags.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-1">
+                              {d.tags.slice(0, 3).map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Card action */}
+                        <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+                          <span className="text-xs font-semibold text-slate-700">
+                            {d.price || 'From $850'}
+                          </span>
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-violet-600 group-hover:translate-x-0.5 transition-transform">
+                            Plan trip <ArrowRight size={12} />
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             )}
           </section>
-
-          <footer className="mt-10 border-t border-subtle py-5 text-[13px] text-faint">
-            Trip Optimizer — trips and preferences are saved to your account.
-            <ProviderCredit className="mt-1.5" />
-          </footer>
         </div>
+
+        {/* Dashboard Edit Trip Modal */}
+        {editingTrip && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs animate-fade-in">
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center">
+                    <Edit3 size={15} />
+                  </div>
+                  <h3 className="text-sm font-bold text-slate-900">Edit Trip</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingTrip(null)}
+                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveEdit} className="space-y-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Destination
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.destination}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({ ...prev, destination: e.target.value }))
+                    }
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs text-slate-800 outline-none focus:border-violet-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Start Date
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={editForm.start_date}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({ ...prev, start_date: e.target.value }))
+                      }
+                      className="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-violet-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      End Date
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={editForm.end_date}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({ ...prev, end_date: e.target.value }))
+                      }
+                      className="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-violet-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Travelers
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={editForm.travelers}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({
+                          ...prev,
+                          travelers: Math.max(1, parseInt(e.target.value) || 1),
+                        }))
+                      }
+                      className="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-violet-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Budget ($ USD)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={50}
+                      value={editForm.budget}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({
+                          ...prev,
+                          budget: Math.max(0, parseInt(e.target.value) || 0),
+                        }))
+                      }
+                      className="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-violet-500"
+                    />
+                  </div>
+                </div>
+
+                {editError && (
+                  <p className="text-xs text-rose-600 font-medium">{editError}</p>
+                )}
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setEditingTrip(null)}
+                    className="rounded-xl border border-slate-200 px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingEdit}
+                    className="rounded-xl bg-violet-600 px-4 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-violet-700 disabled:opacity-50"
+                  >
+                    {savingEdit ? 'Saving…' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </main>
-
-      <nav
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-subtle lg:hidden"
-        style={{
-          backgroundColor: 'var(--panel)',
-          paddingBottom: 'env(safe-area-inset-bottom)',
-        }}
-      >
-        <div className="mx-auto grid max-w-md grid-cols-3">
-          {NAV.map((item) => {
-            const Icon = item.icon
-            return (
-              <button
-                key={item.label}
-                onClick={() => handleNav(item)}
-                className="flex min-h-[56px] flex-col items-center justify-center gap-1 py-2 text-[11px] text-mut transition-colors active:text-brand"
-              >
-                <Icon size={18} />
-                {item.label}
-              </button>
-            )
-          })}
-        </div>
-      </nav>
-
-      <SettingsModal
-        open={settingsOpen}
-        user={user}
-        onClose={() => setSettingsOpen(false)}
-        onSaveProfile={saveProfile}
-        onSavePreferences={savePreferences}
-        onSignOut={signOut}
-        onClearData={clearData}
-        tripsCount={trips.length}
-      />
     </div>
   )
 }
 
-function PrefRow({ label, value }) {
-  return (
-    <div className="flex items-center justify-between border-b border-subtle py-1.5 text-[13px] last:border-0">
-      <dt className="text-mut">{label}</dt>
-      <dd className="font-medium text-soft">{value}</dd>
-    </div>
-  )
-}

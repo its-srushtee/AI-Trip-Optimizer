@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { getUser, saveUser, clearUser } from '../lib/userStore.js'
 import { getToken, clearToken } from '../services/api.js'
 
+/** Thin session hook: the signed-in user + auth helpers. */
 export function useAuth() {
   const [user, setUser] = useState(() => getUser())
 

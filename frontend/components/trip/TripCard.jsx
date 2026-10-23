@@ -2,6 +2,13 @@ import { Trash2 } from 'lucide-react'
 import { interests } from '../../lib/constants.js'
 import { formatRange, daysBetween } from '../../lib/format.js'
 
+/**
+ * One saved trip — shared by the Dashboard grid and the /trips page.
+ *
+ * Editorial layout: a tall photo header carries the destination name, and the
+ * facts below are labelled stat pairs (value over label) rather than a run-on
+ * metadata line — the pattern from the reference designs.
+ */
 export default function TripCard({ trip, image, credit, onRemove }) {
   const nights = daysBetween(trip.start_date, trip.end_date)
 
@@ -9,7 +16,9 @@ export default function TripCard({ trip, image, credit, onRemove }) {
     <article className="card card-hover group overflow-hidden">
       <div className="photo-card scrim relative h-40 rounded-none">
         <img src={image} alt="" />
-        
+        {/* Creative Commons attribution (TASL: Title, Author, Source, Licence).
+            Note: no (c) symbol - these are openly licensed, not all-rights-
+            reserved, and the licence name must be visible, not hover-only. */}
         {credit?.credit && (
           <div
             className="absolute bottom-1 right-2 z-10 max-w-[85%] truncate text-[10px] leading-tight text-white/60"
@@ -72,7 +81,7 @@ export default function TripCard({ trip, image, credit, onRemove }) {
       </div>
 
       <div className="p-4">
-        
+        {/* labelled stat pairs */}
         <div className="grid grid-cols-3 gap-2 sm:gap-3">
           <div>
             <p className="stat-value">{nights > 0 ? `${nights} days` : '—'}</p>

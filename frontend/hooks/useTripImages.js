@@ -1,9 +1,19 @@
 import { useEffect, useState } from 'react'
 import { api, resolveImageUrl } from '../services/api.js'
 
+/**
+ * Resolve a photo for every trip destination.
+ *
+ * The backend decides where the photo comes from (local catalogue file, cached
+ * provider URL, or a fresh provider lookup) — the frontend just asks by name.
+ * Results are keyed by the destination string and resolved in parallel.
+ *
+ * Returns { byName, get } where get(name) -> { url, credit, credit_url, license }
+ */
 export function useTripImages(names) {
   const [byName, setByName] = useState({})
 
+  // Stable key so the effect doesn't refire on every render.
   const key = JSON.stringify([...new Set(names.filter(Boolean))].sort())
 
   useEffect(() => {

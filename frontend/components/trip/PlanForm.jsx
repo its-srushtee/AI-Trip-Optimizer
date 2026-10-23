@@ -2,6 +2,15 @@ import { CheckCircle2 } from 'lucide-react'
 import Button from '../common/Button.jsx'
 import { interests } from '../../lib/constants.js'
 
+/**
+ * The "Create trip" form — fully controlled so the Dashboard and the
+ * standalone /create-trip page drive it identically.
+ *
+ *   form: { destination, start, end, budget, travelers, selected }
+ *   onFieldChange(key, value) · onToggleInterest(id) · onSubmit(event)
+ *   submitting, justAdded — button states
+ *   error — validation message
+ */
 export default function PlanForm({
   form,
   onFieldChange,

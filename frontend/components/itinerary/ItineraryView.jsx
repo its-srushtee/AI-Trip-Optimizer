@@ -1,6 +1,10 @@
 import { formatRange } from '../../lib/format.js'
 import { interests } from '../../lib/constants.js'
 
+/**
+ * Renders the itinerary returned by POST /trips/optimize:
+ *   { destination, dates:{nights}, budget, budget_breakdown, summary, days[] }
+ */
 export default function ItineraryView({ itinerary }) {
   if (!itinerary) return null
   const b = itinerary.budget_breakdown || {}
@@ -14,7 +18,7 @@ export default function ItineraryView({ itinerary }) {
 
   return (
     <div className="space-y-5">
-      
+      {/* summary */}
       <section className="card p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -55,6 +59,7 @@ export default function ItineraryView({ itinerary }) {
         )}
       </section>
 
+      {/* budget breakdown */}
       <section className="card p-5">
         <h3 className="section-title">Budget breakdown</h3>
         <dl className="mt-3">
@@ -72,6 +77,7 @@ export default function ItineraryView({ itinerary }) {
         </dl>
       </section>
 
+      {/* day-by-day */}
       <section>
         <h3 className="section-title mb-3">Day by day</h3>
         <ol className="space-y-3">

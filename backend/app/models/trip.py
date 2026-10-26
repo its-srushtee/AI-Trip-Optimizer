@@ -18,9 +18,23 @@ class Trip(Base):
     budget: Mapped[int] = mapped_column(Integer, default=1000)
     travelers: Mapped[int] = mapped_column(Integer, default=1)
     interests: Mapped[list] = mapped_column(JSON, default=list)
+    preferences: Mapped[dict] = mapped_column(JSON, default=dict)
     status: Mapped[str] = mapped_column(String(40), default="Planning")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
 
     user: Mapped["User"] = relationship(back_populates="trips")  # noqa: F821
+
+    @property
+    def currency(self) -> str:
+        """User-selected currency stored in preferences (default: 'USD')."""
+        prefs = self.preferences or {}
+        return (prefs.get("currency") or "USD").upper()
+
+    @currency.setter
+    def currency(self, value: str) -> None:
+        if not self.preferences:
+            self.preferences = {}
+        self.preferences["currency"] = (value or "USD").upper()
+

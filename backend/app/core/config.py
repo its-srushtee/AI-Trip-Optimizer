@@ -34,6 +34,10 @@ class Settings:
     # falls back to Openverse, which needs no key at all.
     UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY", "")
     PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")
+    SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY", "")
+    GEOAPIFY_API_KEY = os.getenv("GEOAPIFY_API_KEY", "")
+    RAILCORE_API_KEY = os.getenv("RAILCORE_API_KEY", "")
+    RAILCORE_BASE_URL = os.getenv("RAILCORE_BASE_URL", "https://ir.railcore.tech/v1")
 
 
 settings = Settings()

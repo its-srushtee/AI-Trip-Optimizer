@@ -1,7 +1,7 @@
-"""Multi-agent workflow: destination -> hotels -> weather -> transport -> cost -> itinerary.
+"""Multi-agent workflow: budget_planner -> destination -> hotels -> weather -> transport -> cost_validator -> itinerary.
 
-Uses LangGraph when installed (install `langgraph` to enable), otherwise falls
-back to a simple sequential runner. Either way the output contract is the same.
+Enforces budget as the primary constraint across the entire pipeline.
+Uses LangGraph when installed, otherwise falls back to sequential execution.
 """
 from typing import Any
 
@@ -14,13 +14,43 @@ from app.agents import (
     WeatherAgent,
 )
 
-AGENTS = [
-    DestinationAgent(),
-    HotelAgent(),
-    WeatherAgent(),
-    TransportAgent(),
-    CostAgent(),
-    ItineraryAgent(),
+cost_agent = CostAgent()
+destination_agent = DestinationAgent()
+hotel_agent = HotelAgent()
+weather_agent = WeatherAgent()
+transport_agent = TransportAgent()
+itinerary_agent = ItineraryAgent()
+
+# Node functions
+def budget_planner_node(state: dict[str, Any]) -> dict[str, Any]:
+    return cost_agent.pre_allocate(state)
+
+def destination_node(state: dict[str, Any]) -> dict[str, Any]:
+    return destination_agent.run(state)
+
+def hotel_node(state: dict[str, Any]) -> dict[str, Any]:
+    return hotel_agent.run(state)
+
+def weather_node(state: dict[str, Any]) -> dict[str, Any]:
+    return weather_agent.run(state)
+
+def transport_node(state: dict[str, Any]) -> dict[str, Any]:
+    return transport_agent.run(state)
+
+def cost_validator_node(state: dict[str, Any]) -> dict[str, Any]:
+    return cost_agent.run(state)
+
+def itinerary_node(state: dict[str, Any]) -> dict[str, Any]:
+    return itinerary_agent.run(state)
+
+NODE_SEQUENCE = [
+    ("budget_planner", budget_planner_node),
+    ("destination", destination_node),
+    ("hotels", hotel_node),
+    ("weather", weather_node),
+    ("transport", transport_node),
+    ("cost_validator", cost_validator_node),
+    ("itinerary", itinerary_node),
 ]
 
 try:
@@ -33,9 +63,9 @@ except ImportError:  # pragma: no cover
 
 def _build_graph():
     graph = StateGraph(dict)
-    for agent in AGENTS:
-        graph.add_node(agent.name, agent.run)
-    names = [a.name for a in AGENTS]
+    for name, fn in NODE_SEQUENCE:
+        graph.add_node(name, fn)
+    names = [name for name, _ in NODE_SEQUENCE]
     for i in range(len(names) - 1):
         graph.add_edge(names[i], names[i + 1])
     graph.set_entry_point(names[0])
@@ -44,8 +74,8 @@ def _build_graph():
 
 
 def _run_sequential(state: dict[str, Any]) -> dict[str, Any]:
-    for agent in AGENTS:
-        state = agent.run(state)
+    for _, fn in NODE_SEQUENCE:
+        state = fn(state)
     return state
 
 

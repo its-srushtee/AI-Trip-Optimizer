@@ -19,6 +19,7 @@ from app.database.base import Base, SessionLocal, engine
 # Imported for their side effect: registering the tables on Base.metadata
 # before create_all() runs below.
 from app.models import image_cache as _image_cache  # noqa: F401
+from app.models import destination_cache as _destination_cache  # noqa: F401
 from app.services.destination_service import seed_destinations
 
 # Dev convenience: create tables on startup (use Alembic migrations in prod).

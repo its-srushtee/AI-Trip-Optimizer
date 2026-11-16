@@ -38,7 +38,7 @@ def _norm(name: str) -> str:
 
 
 def _local_file_for(db: Session, name: str) -> str | None:
-    """Exact/word-boundary match against the seeded catalogue.
+    """Exact/word-boundary match against the seeded catalogue or local images directory.
 
     Deliberately NOT a substring test - `"goat island".includes("goa")` was
     the bug in the old frontend helper. We compare whole words instead.
@@ -46,6 +46,14 @@ def _local_file_for(db: Session, name: str) -> str | None:
     n = _norm(name)
     if not n:
         return None
+
+    # Check if a matching image file exists directly on disk (e.g. london.jpg, tokyo.jpg, goa.jpg)
+    direct_file = f"{n.replace(' ', '_')}.jpg"
+    if os.path.exists(os.path.join(_IMAGES_DIR, direct_file)):
+        return f"/images/{direct_file}"
+    if os.path.exists(os.path.join(_IMAGES_DIR, f"{n}.jpg")):
+        return f"/images/{n}.jpg"
+
     words = set(n.split())
     for d in db.query(Destination).all():
         dn = _norm(d.name)
@@ -90,6 +98,15 @@ def resolve(db: Session, name: str, allow_remote: bool = True) -> dict:
     if not key:
         return {"url": FALLBACK, "provider": "local", "source": "fallback"}
 
+    # 1. Check local catalogue / bundled image files first (highest quality, zero network)
+    local = _local_file_for(db, name)
+    if local:
+        return {"url": local, "thumb_url": local, "credit": "", "credit_url": "",
+                "license": "", "license_url": "", "title": "",
+                "source_name": "", "source_url": "",
+                "provider": "local", "source": "catalogue"}
+
+    # 2. Check cached third-party photo
     cached = db.get(ImageCache, key)
     if cached:
         return {
@@ -105,13 +122,6 @@ def resolve(db: Session, name: str, allow_remote: bool = True) -> dict:
             "provider": cached.provider,
             "source": "cache",
         }
-
-    local = _local_file_for(db, name)
-    if local:
-        return {"url": local, "thumb_url": local, "credit": "", "credit_url": "",
-                "license": "", "license_url": "", "title": "",
-                "source_name": "", "source_url": "",
-                "provider": "local", "source": "catalogue"}
 
     if not allow_remote:
         return {"url": FALLBACK, "provider": "local", "source": "fallback"}

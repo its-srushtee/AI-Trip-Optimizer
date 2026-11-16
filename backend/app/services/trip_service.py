@@ -23,10 +23,17 @@ def get_trip(db: Session, user_id: int, trip_id: int) -> Trip:
 
 
 def create_trip(db: Session, user_id: int, body: TripCreate) -> Trip:
-    if body.end_date < body.start_date:
+    if body.end_date <= body.start_date:
         raise HTTPException(status_code=400, detail="End date must be after start date")
 
-    trip = Trip(user_id=user_id, **body.model_dump())
+    data = body.model_dump()
+    currency = data.pop("currency", None)
+    prefs = dict(data.get("preferences") or {})
+    if currency:
+        prefs["currency"] = str(currency).upper()
+    data["preferences"] = prefs
+
+    trip = Trip(user_id=user_id, **data)
     db.add(trip)
     db.commit()
     db.refresh(trip)
@@ -39,8 +46,14 @@ def update_trip(db: Session, user_id: int, trip_id: int, body: TripUpdate) -> Tr
 
     new_start = data.get("start_date", trip.start_date)
     new_end = data.get("end_date", trip.end_date)
-    if new_end < new_start:
+    if new_end <= new_start:
         raise HTTPException(status_code=400, detail="End date must be after start date")
+
+    currency = data.pop("currency", None)
+    if currency:
+        curr_prefs = dict(trip.preferences or {})
+        curr_prefs["currency"] = str(currency).upper()
+        trip.preferences = curr_prefs
 
     for field, val in data.items():
         setattr(trip, field, val)

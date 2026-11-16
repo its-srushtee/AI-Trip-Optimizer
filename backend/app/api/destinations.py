@@ -27,6 +27,7 @@ class RecommendPayload(BaseModel):
     special_requests: str | None = None
     style: str | None = None
     pace: str | None = None
+    currency: str | None = None
 
 
 @router.get("")
@@ -48,6 +49,7 @@ def post_recommendations(payload: RecommendPayload, db: Session = Depends(get_db
         special_requests=payload.special_requests,
         style=payload.style,
         pace=payload.pace,
+        currency=payload.currency,
     )
 
 
@@ -61,10 +63,6 @@ def get_destination_image(
     return resolve_image(db, q, allow_remote=remote)
 
 
-# Pexels requires a "prominent link to Pexels" wherever their API is used, and
-# Unsplash requires the app to attribute Unsplash itself. This tells the UI
-# which providers have actually supplied an image, so the site-level credit
-# only names the ones in use.
 _PROVIDER_META = {
     "unsplash": {"name": "Unsplash",
                  "url": "https://unsplash.com?utm_source=trip_optimizer&utm_medium=referral"},

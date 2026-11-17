@@ -82,13 +82,12 @@ def signup(db: Session, body: SignupRequest) -> dict:
     if db.query(User).filter(User.email == email).first():
         raise HTTPException(status_code=409, detail="Email already registered")
 
-    # Preferences start empty — the user fills them in after first sign-in
-    # through the profile completion flow (PATCH /users/me).
+    # Travel preferences can be captured at signup or updated later via PATCH /users/me
     user = User(
         name=body.name.strip(),
         email=email,
         hashed_password=hash_password(body.password),
-        preferences={},
+        preferences=body.preferences or {},
     )
     db.add(user)
     db.commit()

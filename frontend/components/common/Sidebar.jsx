@@ -12,9 +12,12 @@ import {
   Menu,
   X,
   Sparkles,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import { clearUser, getUser } from '../../lib/userStore.js'
 import { clearToken } from '../../services/api.js'
+import { useTheme } from '../../hooks/useTheme.js'
 
 const NAV_ITEMS = [
   { icon: Home, label: 'Home', path: '/dashboard' },
@@ -26,6 +29,7 @@ const NAV_ITEMS = [
 export default function Sidebar({ activeNav }) {
   const navigate = useNavigate()
   const location = useLocation()
+  const { theme, toggle: toggleTheme } = useTheme()
 
   // Collapsed state persisted in localStorage
   const [collapsed, setCollapsed] = useState(() => {
@@ -151,8 +155,8 @@ export default function Sidebar({ activeNav }) {
                 style={
                   active
                     ? {
-                        backgroundColor: '#f5f3ff',
-                        color: '#6d28d9',
+                        backgroundColor: theme === 'dark' ? 'rgba(99, 102, 241, 0.22)' : '#f5f3ff',
+                        color: theme === 'dark' ? '#c7d2fe' : '#6d28d9',
                       }
                     : {}
                 }
@@ -160,9 +164,9 @@ export default function Sidebar({ activeNav }) {
                 <Icon
                   size={19}
                   className={`shrink-0 transition-transform group-hover:scale-105 ${
-                    active ? 'text-violet-600' : 'text-slate-400 group-hover:text-slate-600'
+                    active ? 'text-violet-600 dark:text-indigo-300' : 'text-slate-400 dark:text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200'
                   }`}
-                  style={active ? { color: '#7c3aed' } : {}}
+                  style={active ? { color: theme === 'dark' ? '#818cf8' : '#7c3aed' } : {}}
                 />
                 {!collapsed && (
                   <span className="truncate tracking-[-0.01em]">{item.label}</span>
@@ -170,7 +174,7 @@ export default function Sidebar({ activeNav }) {
                 {active && !collapsed && (
                   <span
                     className="ml-auto h-1.5 w-1.5 rounded-full"
-                    style={{ backgroundColor: '#7c3aed' }}
+                    style={{ backgroundColor: theme === 'dark' ? '#818cf8' : '#7c3aed' }}
                   />
                 )}
               </button>
@@ -196,6 +200,40 @@ export default function Sidebar({ activeNav }) {
           >
             <HelpCircle size={18} className="shrink-0 text-slate-400 group-hover:text-slate-600" />
             {!collapsed && <span>Help & FAQ</span>}
+          </button>
+
+          {/* Dark / Light Mode Toggle */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            title={collapsed ? (theme === 'dark' ? 'Dark Mode (click for light)' : 'Light Mode (click for dark)') : undefined}
+            className={`group flex w-full items-center rounded-xl font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors ${
+              collapsed
+                ? 'h-10 justify-center px-0'
+                : 'h-10 justify-between px-3 text-[13px]'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              {theme === 'dark' ? (
+                <Moon size={18} className="shrink-0 text-indigo-400 transition-transform group-hover:-rotate-12" />
+              ) : (
+                <Sun size={18} className="shrink-0 text-amber-500 transition-transform group-hover:rotate-45" />
+              )}
+              {!collapsed && <span>{theme === 'dark' ? 'Dark Mode' : 'Light Mode'}</span>}
+            </div>
+            {!collapsed && (
+              <div
+                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${
+                  theme === 'dark' ? 'bg-indigo-600' : 'bg-slate-200'
+                }`}
+              >
+                <span
+                  className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                    theme === 'dark' ? 'translate-x-4.5' : 'translate-x-1'
+                  }`}
+                />
+              </div>
+            )}
           </button>
 
           {/* User Profile summary when expanded */}
@@ -274,13 +312,24 @@ export default function Sidebar({ activeNav }) {
           </Link>
         </div>
 
-        <button
-          onClick={() => navigate('/complete-profile')}
-          className="grid h-8 w-8 place-items-center rounded-full text-[11px] font-bold text-white shadow-xs"
-          style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)' }}
-        >
-          {firstName.slice(0, 2).toUpperCase()}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 transition-colors"
+            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          >
+            {theme === 'dark' ? <Sun size={17} className="text-amber-400" /> : <Moon size={17} className="text-indigo-500" />}
+          </button>
+
+          <button
+            onClick={() => navigate('/complete-profile')}
+            className="grid h-8 w-8 place-items-center rounded-full text-[11px] font-bold text-white shadow-xs"
+            style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)' }}
+          >
+            {firstName.slice(0, 2).toUpperCase()}
+          </button>
+        </div>
       </header>
 
       {/* ======= Mobile Drawer Backdrop & Menu ======= */}
@@ -345,16 +394,16 @@ export default function Sidebar({ activeNav }) {
                     style={
                       active
                         ? {
-                            backgroundColor: '#f5f3ff',
-                            color: '#6d28d9',
+                            backgroundColor: theme === 'dark' ? 'rgba(99, 102, 241, 0.22)' : '#f5f3ff',
+                            color: theme === 'dark' ? '#c7d2fe' : '#6d28d9',
                           }
                         : {}
                     }
                   >
                     <Icon
                       size={18}
-                      className={active ? 'text-violet-600' : 'text-slate-400'}
-                      style={active ? { color: '#7c3aed' } : {}}
+                      className={active ? 'text-violet-600 dark:text-indigo-300' : 'text-slate-400 dark:text-slate-400'}
+                      style={active ? { color: theme === 'dark' ? '#818cf8' : '#7c3aed' } : {}}
                     />
                     <span>{item.label}</span>
                   </button>
@@ -364,6 +413,31 @@ export default function Sidebar({ activeNav }) {
 
             {/* Footer */}
             <div className="border-t p-3 space-y-1">
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 text-[13px] font-medium text-slate-600 hover:bg-slate-50"
+              >
+                <div className="flex items-center gap-3">
+                  {theme === 'dark' ? (
+                    <Moon size={17} className="text-indigo-400" />
+                  ) : (
+                    <Sun size={17} className="text-amber-500" />
+                  )}
+                  <span>{theme === 'dark' ? 'Dark Mode' : 'Light Mode'}</span>
+                </div>
+                <div
+                  className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${
+                    theme === 'dark' ? 'bg-indigo-600' : 'bg-slate-200'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                      theme === 'dark' ? 'translate-x-4.5' : 'translate-x-1'
+                    }`}
+                  />
+                </div>
+              </button>
               <button
                 type="button"
                 onClick={() => {

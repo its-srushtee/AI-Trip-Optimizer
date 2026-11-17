@@ -26,6 +26,22 @@ class Trip(Base):
 
     user: Mapped["User"] = relationship(back_populates="trips")  # noqa: F821
 
+    expenses: Mapped[list["TripExpense"]] = relationship(  # noqa: F821
+        back_populates="trip", cascade="all, delete-orphan"
+    )
+    alerts: Mapped[list["TripAlert"]] = relationship(  # noqa: F821
+        back_populates="trip", cascade="all, delete-orphan"
+    )
+    monitoring_logs: Mapped[list["TripMonitoringLog"]] = relationship(  # noqa: F821
+        back_populates="trip", cascade="all, delete-orphan"
+    )
+    reoptimizations: Mapped[list["TripReoptimization"]] = relationship(  # noqa: F821
+        back_populates="trip", cascade="all, delete-orphan"
+    )
+    chat_messages: Mapped[list["TripChatMessage"]] = relationship(  # noqa: F821
+        back_populates="trip", cascade="all, delete-orphan"
+    )
+
     @property
     def currency(self) -> str:
         """User-selected currency stored in preferences (default: 'USD')."""
@@ -37,4 +53,16 @@ class Trip(Base):
         if not self.preferences:
             self.preferences = {}
         self.preferences["currency"] = (value or "USD").upper()
+
+    @property
+    def itinerary(self) -> dict:
+        """Active trip plan/itinerary stored in preferences."""
+        prefs = self.preferences or {}
+        return prefs.get("itinerary") or prefs.get("plan") or {}
+
+    @itinerary.setter
+    def itinerary(self, value: dict) -> None:
+        prefs = dict(self.preferences or {})
+        prefs["itinerary"] = value
+        self.preferences = prefs
 

@@ -1,8 +1,13 @@
 """Application settings loaded from environment / .env file."""
 import os
 
+from pathlib import Path
 from dotenv import load_dotenv
 
+# Try loading from backend/.env, then root .env
+_backend_env = Path(__file__).resolve().parent.parent.parent / ".env"
+if _backend_env.exists():
+    load_dotenv(_backend_env)
 load_dotenv()
 
 

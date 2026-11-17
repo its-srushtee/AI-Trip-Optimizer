@@ -1,4 +1,4 @@
-import { formatRange } from '../../lib/format.js'
+import { formatRange, formatCurrency } from '../../lib/format.js'
 import { interests } from '../../lib/constants.js'
 
 /**
@@ -8,6 +8,7 @@ import { interests } from '../../lib/constants.js'
 export default function ItineraryView({ itinerary }) {
   if (!itinerary) return null
   const b = itinerary.budget_breakdown || {}
+  const curr = itinerary.currency || b.currency || 'USD'
 
   const rows = [
     ['Flights', b.flights],
@@ -34,7 +35,7 @@ export default function ItineraryView({ itinerary }) {
           <div className="text-right">
             <p className="eyebrow">Total budget</p>
             <p className="text-lg font-semibold tabular-nums text-main">
-              ${Number(itinerary.budget).toLocaleString()}
+              {formatCurrency(itinerary.budget, curr)}
             </p>
           </div>
         </div>
@@ -70,7 +71,7 @@ export default function ItineraryView({ itinerary }) {
             >
               <dt className="text-mut">{label}</dt>
               <dd className="font-medium tabular-nums text-soft">
-                ${Number(value || 0).toLocaleString()}
+                {formatCurrency(value || 0, curr)}
               </dd>
             </div>
           ))}
@@ -91,7 +92,7 @@ export default function ItineraryView({ itinerary }) {
                   <span className="text-[14px] font-medium text-main">{d.theme}</span>
                 </div>
                 <span className="shrink-0 text-[13px] tabular-nums text-mut">
-                  {d.date} · ${d.estimate_usd}
+                  {d.date} · {formatCurrency(d.estimate_cost || d.estimate_usd, curr)}
                 </span>
               </div>
 

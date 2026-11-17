@@ -92,7 +92,7 @@ def main():
 
     print("\n== trips ==")
     trip = {"destination": "Bali", "start_date": "2026-10-12", "end_date": "2026-10-19",
-            "budget": 2000, "travelers": 2, "interests": ["beaches", "food"]}
+            "budget": 12000, "travelers": 2, "interests": ["beaches", "food"]}
     s, r = call("POST", "/trips", trip, token=token)
     results.append(check("POST /trips -> 201", s == 201 and r.get("destination") == "Bali", f"status={s}"))
 
@@ -101,6 +101,9 @@ def main():
 
     s, r = call("POST", "/trips", {**trip, "start_date": "2026-10-19", "end_date": "2026-10-12"}, token=token)
     results.append(check("end < start -> 400", s == 400, r.get("detail")))
+
+    s, r = call("POST", "/trips", {**trip, "start_date": "2026-10-19", "end_date": "2026-10-19"}, token=token)
+    results.append(check("end == start -> 400", s == 400, r.get("detail")))
 
     s, r = call("GET", "/trips")
     results.append(check("no token -> 401", s == 401, r.get("detail")))

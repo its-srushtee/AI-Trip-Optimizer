@@ -1,6 +1,6 @@
 import { CheckCircle2 } from 'lucide-react'
 import Button from '../common/Button.jsx'
-import { interests } from '../../lib/constants.js'
+import { interests, formatCurrency, getTodayDateStr, getNextDayDateStr } from '../../lib/constants.js'
 
 /**
  * The "Create trip" form — fully controlled so the Dashboard and the
@@ -43,8 +43,15 @@ export default function PlanForm({
           <input
             id="start"
             type="date"
+            min={getTodayDateStr()}
             value={form.start}
-            onChange={(e) => onFieldChange('start', e.target.value)}
+            onChange={(e) => {
+              const newStart = e.target.value
+              onFieldChange('start', newStart)
+              if (newStart && (!form.end || form.end <= newStart)) {
+                onFieldChange('end', getNextDayDateStr(newStart))
+              }
+            }}
             className="input-field"
           />
         </div>
@@ -55,6 +62,7 @@ export default function PlanForm({
           <input
             id="end"
             type="date"
+            min={form.start ? getNextDayDateStr(form.start) : getNextDayDateStr(getTodayDateStr())}
             value={form.end}
             onChange={(e) => onFieldChange('end', e.target.value)}
             className="input-field"
@@ -69,7 +77,7 @@ export default function PlanForm({
               Budget
             </label>
             <span className="text-[13px] font-medium tabular-nums text-main">
-              ${form.budget.toLocaleString()}
+              {formatCurrency(form.budget, form.currency || 'USD')}
             </span>
           </div>
           <input

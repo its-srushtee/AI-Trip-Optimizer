@@ -51,8 +51,23 @@ export function recommend(destinations, prefs) {
       }
     }
 
-    if ((d.styles || []).includes(prefs.style)) s += 10
-    if ((d.paces || []).includes(prefs.pace)) s += 8
+    // Food + Photography
+    if (ints.includes('food') && ints.includes('photography')) {
+      if (/food|sushi|ramen|culinary|market|neon|skyline|crossing|photogenic/i.test(text + ' ' + tags.join(' '))) {
+        s += 35
+      }
+    }
+
+    const styleStr = (prefs.style || '').toLowerCase()
+    const dStyles = (d.styles || []).map((x) => String(x).toLowerCase())
+    if (dStyles.includes(styleStr)) s += 12
+    else if (styleStr === 'backpacker' && dStyles.includes('budget')) s += 12
+
+    const paceStr = (prefs.pace || '').toLowerCase()
+    const dPaces = (d.paces || []).map((x) => String(x).toLowerCase())
+    if (dPaces.includes(paceStr)) s += 10
+    else if ((paceStr === 'moderate' && dPaces.includes('balanced')) || (paceStr === 'fast-paced' && dPaces.includes('packed'))) s += 10
+
     return { ...d, s }
   })
 

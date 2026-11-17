@@ -1,6 +1,6 @@
 import { Trash2 } from 'lucide-react'
 import { interests } from '../../lib/constants.js'
-import { formatRange, daysBetween } from '../../lib/format.js'
+import { formatRange, daysBetween, formatCurrency } from '../../lib/format.js'
 
 /**
  * One saved trip — shared by the Dashboard grid and the /trips page.
@@ -93,7 +93,7 @@ export default function TripCard({ trip, image, credit, onRemove }) {
           </div>
           <div>
             <p className="stat-value tabular-nums">
-              ${Number(trip.budget).toLocaleString()}
+              {formatCurrency(trip.budget, trip.currency || trip.preferences?.currency)}
             </p>
             <p className="stat-label">Budget</p>
           </div>

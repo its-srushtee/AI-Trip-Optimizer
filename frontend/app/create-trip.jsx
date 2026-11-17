@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   MapPin,
+  Navigation,
   Calendar,
   Users,
   Sparkles,
@@ -30,6 +31,8 @@ import {
   accessibilityOptions,
   travelStyles,
   tripPaces,
+  getTodayDateStr,
+  getNextDayDateStr,
 } from '../lib/constants.js'
 
 const STEPS = [
@@ -37,6 +40,16 @@ const STEPS = [
   { id: 2, title: 'Budget & Dates', desc: 'Timing & Spending' },
   { id: 3, title: 'Review', desc: 'Recommendations & Confirm' },
 ]
+
+const CURRENCY_CONFIG = {
+  INR: { base: 10000, step: 500, min: 10000, placeholder: 'e.g. 10000', rate: 1 },
+  USD: { base: 1200, step: 50, min: 120, placeholder: 'e.g. 1200', rate: 0.012 },
+  EUR: { base: 1100, step: 50, min: 110, placeholder: 'e.g. 1100', rate: 0.011 },
+  GBP: { base: 950, step: 50, min: 95, placeholder: 'e.g. 950', rate: 0.0095 },
+  CAD: { base: 1600, step: 50, min: 160, placeholder: 'e.g. 1600', rate: 0.016 },
+  AUD: { base: 1800, step: 50, min: 180, placeholder: 'e.g. 1800', rate: 0.018 },
+  JPY: { base: 180000, step: 5000, min: 18000, placeholder: 'e.g. 180000', rate: 1.8 },
+}
 
 export default function CreateTrip() {
   const navigate = useNavigate()
@@ -46,16 +59,20 @@ export default function CreateTrip() {
   const user = getUser()
   const userPrefs = user?.preferences || {}
 
+  const defaultCurrency = userPrefs.currency || 'INR'
+  const defaultBudget = CURRENCY_CONFIG[defaultCurrency]?.base || 10000
+
   // 3-step state: 0 = Preferences, 1 = Budget & Dates, 2 = Review & Recommendations
   const [step, setStep] = useState(0)
 
   // Form State — preserves state across all steps
   const [form, setForm] = useState(() => ({
+    origin: searchParams.get('origin') || '',
     destination: searchParams.get('destination') || '',
     start: '',
     end: '',
-    budget: 1500,
-    currency: 'USD',
+    budget: Math.max(defaultBudget, CURRENCY_CONFIG[defaultCurrency]?.min || 10000),
+    currency: defaultCurrency,
     travelers: 2,
     selectedInterests: userPrefs.interests || ['nature', 'adventure'],
     travelStyle: userPrefs.style || 'Comfort',
@@ -64,6 +81,14 @@ export default function CreateTrip() {
     accessibility: 'None required',
     specialRequests: '',
   }))
+
+  // Auto-clamp budget if below minimum
+  useEffect(() => {
+    const minBudget = CURRENCY_CONFIG[form.currency]?.min || 10000
+    if (form.budget < minBudget) {
+      updateField('budget', minBudget)
+    }
+  }, [form.currency])
 
   const [formError, setFormError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -89,6 +114,26 @@ export default function CreateTrip() {
     if (formError) setFormError('')
   }
 
+  // Currency switcher with smart starting budget adjustment
+  const handleCurrencyChange = (newCurrency) => {
+    const oldCurrency = form.currency
+    if (oldCurrency === newCurrency) return
+
+    const oldCfg = CURRENCY_CONFIG[oldCurrency] || { base: 10000, rate: 1 }
+    const newCfg = CURRENCY_CONFIG[newCurrency] || { base: 10000, rate: 1 }
+
+    if (form.budget === oldCfg.base) {
+      updateField('budget', newCfg.base)
+    } else {
+      const inrValue = form.budget / oldCfg.rate
+      const converted = inrValue * newCfg.rate
+      const step = newCfg.step || 50
+      const rounded = Math.round(converted / step) * step
+      updateField('budget', Math.max(newCfg.min || 50, rounded))
+    }
+    updateField('currency', newCurrency)
+  }
+
   // Toggle interest chip
   const toggleInterest = (id) => {
     setForm((prev) => {
@@ -111,6 +156,7 @@ export default function CreateTrip() {
           destination: form.destination.trim() || undefined,
           interests: form.selectedInterests,
           budget: Number(form.budget),
+          currency: form.currency,
           travelers: Number(form.travelers),
           start_date: form.start || undefined,
           end_date: form.end || undefined,
@@ -154,6 +200,7 @@ export default function CreateTrip() {
     form.destination,
     form.selectedInterests,
     form.budget,
+    form.currency,
     form.travelers,
     form.travelStyle,
     form.tripPace,
@@ -177,12 +224,20 @@ export default function CreateTrip() {
         setFormError('Please select both a start date and an end date.')
         return
       }
-      if (new Date(form.end) < new Date(form.start)) {
-        setFormError('End date must be after the start date.')
+      const todayStr = getTodayDateStr()
+      if (form.start < todayStr) {
+        setFormError('Start date cannot be in the past. Please choose today or an upcoming date.')
         return
       }
-      if (form.budget < 100) {
-        setFormError('Please enter a realistic travel budget.')
+      if (form.end <= form.start) {
+        setFormError('End date cannot be the same as or earlier than the start date. A trip must be at least 1 night.')
+        return
+      }
+      const minBudget = CURRENCY_CONFIG[form.currency]?.min || 10000
+      if (Number(form.budget) < minBudget) {
+        setFormError(
+          `Minimum allowed budget for ${form.currency} is ${activeCurrencySymbol}${minBudget.toLocaleString()}. Trips under ${activeCurrencySymbol}${minBudget.toLocaleString()} are not allowed.`
+        )
         return
       }
     }
@@ -201,6 +256,17 @@ export default function CreateTrip() {
   // Final submission: saves trip to backend database & redirects to trips dashboard
   const handleFinalSubmit = async () => {
     if (submitting) return
+
+    const minBudget = CURRENCY_CONFIG[form.currency]?.min || 10000
+    if (Number(form.budget) < minBudget) {
+      setFormError(
+        `Minimum allowed budget for ${form.currency} is ${activeCurrencySymbol}${minBudget.toLocaleString()}. Trips under ${activeCurrencySymbol}${minBudget.toLocaleString()} cannot be created.`
+      )
+      setStep(1)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+
     setSubmitting(true)
     setFormError('')
 
@@ -212,6 +278,17 @@ export default function CreateTrip() {
         budget: Number(form.budget),
         travelers: Number(form.travelers),
         interests: form.selectedInterests,
+        currency: form.currency || 'INR',
+        preferences: {
+          origin: form.origin?.trim() || undefined,
+          style: form.travelStyle,
+          pace: form.tripPace,
+          accommodation: userPrefs.accommodation || 'Hotel',
+          food: form.dietary || userPrefs.food || 'No preference',
+          currency: form.currency || 'INR',
+          accessibility: form.accessibility,
+          special_requests: form.specialRequests,
+        },
       }
 
       const created = await api.createTrip(payload, getToken())
@@ -224,7 +301,13 @@ export default function CreateTrip() {
         }
       }, 700)
     } catch (err) {
-      setFormError(err.message || 'Could not save your trip. Please try again.')
+      const msg =
+        typeof err?.message === 'string' && err.message !== '[object Object]'
+          ? err.message
+          : typeof err === 'string'
+          ? err
+          : 'Could not save your trip. Please check your details and try again.'
+      setFormError(msg)
       setSubmitting(false)
     }
 
@@ -259,9 +342,6 @@ export default function CreateTrip() {
         }`}
       >
         <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-          {/* ============================================================
-              1. SCENIC DESTINATION HEADER WITH DARK GRADIENT OVERLAY
-              ============================================================ */}
           <section className="relative mb-8 overflow-hidden rounded-3xl shadow-md">
             <img
               src={resolveImageUrl('/images/hero.jpg')}
@@ -351,43 +431,66 @@ export default function CreateTrip() {
             </div>
           )}
 
-          {/* ============================================================
-              STEP 1: PREFERENCES & DESTINATION
-              ============================================================ */}
           {step === 0 && (
             <div className="space-y-8 animate-fade-up">
-              {/* Section A: Destination Search & Input */}
+              {/* Section A: Origin & Destination */}
               <div className="rounded-3xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-xs">
                 <div className="mb-5">
                   <h3 className="text-base sm:text-lg font-bold text-slate-900">
                     A. Where do you want to go?
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Enter any city, country, or region in the world (e.g. Kyoto, Swiss Alps, Bali, Rome, Banff).
+                    Enter your departure location and target destination.
                   </p>
                 </div>
 
-                <div className="relative">
-                  <MapPin
-                    size={18}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-violet-600"
-                  />
-                  <input
-                    type="text"
-                    value={form.destination}
-                    onChange={(e) => updateField('destination', e.target.value)}
-                    placeholder="Enter destination (e.g. Kyoto, Paris, Swiss Alps, Bali)"
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 pl-11 pr-4 py-3.5 text-sm text-slate-800 outline-none transition-colors focus:border-violet-600 focus:bg-white focus:ring-3 focus:ring-violet-500/10"
-                  />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      From where you want to go <span className="font-normal text-slate-400">(Departure)</span>
+                    </label>
+                    <div className="relative">
+                      <Navigation
+                        size={16}
+                        className="absolute left-3.5 top-1/2 -translate-y-1/2 text-blue-600"
+                      />
+                      <input
+                        type="text"
+                        value={form.origin}
+                        onChange={(e) => updateField('origin', e.target.value)}
+                        placeholder="Starting city (e.g. New York, London, Mumbai)"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 py-3 text-sm text-slate-800 outline-none transition-colors focus:border-violet-600 focus:bg-white focus:ring-3 focus:ring-violet-500/10"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      What is your destination <span className="text-violet-600">*</span>
+                    </label>
+                    <div className="relative">
+                      <MapPin
+                        size={16}
+                        className="absolute left-3.5 top-1/2 -translate-y-1/2 text-violet-600"
+                      />
+                      <input
+                        type="text"
+                        value={form.destination}
+                        onChange={(e) => updateField('destination', e.target.value)}
+                        placeholder="Destination (e.g. Kyoto, Paris, Swiss Alps, Bali)"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 py-3 text-sm text-slate-800 outline-none transition-colors focus:border-violet-600 focus:bg-white focus:ring-3 focus:ring-violet-500/10"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Section C: Travel Preferences Chips */}
+              {/* Section B: Travel Preferences Chips */}
               <div className="rounded-3xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-xs">
                 <div className="mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
                     <h3 className="text-base sm:text-lg font-bold text-slate-900">
-                      C. Travel Preferences
+                      B. Travel Preferences
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
                       Select all experiences you want prioritized in your itinerary.
@@ -422,11 +525,11 @@ export default function CreateTrip() {
                 </div>
               </div>
 
-              {/* Section E: Additional Preferences */}
+              {/* Section C: Additional Preferences & Special Requests */}
               <div className="rounded-3xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-xs">
                 <div className="mb-5">
                   <h3 className="text-base sm:text-lg font-bold text-slate-900">
-                    E. Additional Preferences & Special Requests
+                    C. Additional Preferences & Special Requests
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
                     Customize dietary needs, accessibility, or specific trip notes.
@@ -503,16 +606,13 @@ export default function CreateTrip() {
             </div>
           )}
 
-          {/* ============================================================
-              STEP 2: BUDGET & DATES
-              ============================================================ */}
           {step === 1 && (
             <div className="space-y-8 animate-fade-up">
-              {/* Section B: Travel Dates & Travelers */}
+              {/* Section D: Travel Dates & Travelers */}
               <div className="rounded-3xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-xs">
                 <div className="mb-5">
                   <h3 className="text-base sm:text-lg font-bold text-slate-900">
-                    B. Travel Dates & Travelers
+                    D. Travel Dates & Travelers
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
                     When are you planning to travel and with whom?
@@ -531,8 +631,15 @@ export default function CreateTrip() {
                       />
                       <input
                         type="date"
+                        min={getTodayDateStr()}
                         value={form.start}
-                        onChange={(e) => updateField('start', e.target.value)}
+                        onChange={(e) => {
+                          const newStart = e.target.value
+                          updateField('start', newStart)
+                          if (newStart && (!form.end || form.end <= newStart)) {
+                            updateField('end', getNextDayDateStr(newStart))
+                          }
+                        }}
                         className="w-full rounded-2xl border border-slate-200 pl-10 pr-3.5 py-3 text-xs text-slate-800 outline-none focus:border-violet-500"
                       />
                     </div>
@@ -549,6 +656,7 @@ export default function CreateTrip() {
                       />
                       <input
                         type="date"
+                        min={form.start ? getNextDayDateStr(form.start) : getNextDayDateStr(getTodayDateStr())}
                         value={form.end}
                         onChange={(e) => updateField('end', e.target.value)}
                         className="w-full rounded-2xl border border-slate-200 pl-10 pr-3.5 py-3 text-xs text-slate-800 outline-none focus:border-violet-500"
@@ -579,7 +687,8 @@ export default function CreateTrip() {
                         updateField('travelers', Math.max(1, form.travelers - 1))
                       }
                       disabled={form.travelers <= 1}
-                      className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                      title={form.travelers <= 1 ? 'Minimum 1 traveler' : 'Decrease travelers'}
+                      className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-all"
                     >
                       -
                     </button>
@@ -591,23 +700,29 @@ export default function CreateTrip() {
                       onClick={() =>
                         updateField('travelers', Math.min(15, form.travelers + 1))
                       }
-                      className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                      disabled={form.travelers >= 15}
+                      title={form.travelers >= 15 ? 'Maximum 15 travelers allowed' : 'Increase travelers'}
+                      className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-all"
                     >
                       +
                     </button>
                     <span className="text-xs text-slate-500">
-                      {form.travelers === 1 ? 'Solo traveler' : `${form.travelers} people`}
+                      {form.travelers === 1
+                        ? 'Solo traveler'
+                        : form.travelers === 15
+                        ? '15 people (maximum limit)'
+                        : `${form.travelers} people`}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* Section D: Budget & Currency */}
+              {/* Section E: Budget & Currency */}
               <div className="rounded-3xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-xs">
                 <div className="mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
                     <h3 className="text-base sm:text-lg font-bold text-slate-900">
-                      D. Trip Budget
+                      E. Trip Budget
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
                       Specify your estimated spending limit and preferred currency.
@@ -617,8 +732,8 @@ export default function CreateTrip() {
                     <label className="text-xs text-slate-500 font-medium">Currency:</label>
                     <select
                       value={form.currency}
-                      onChange={(e) => updateField('currency', e.target.value)}
-                      className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-none"
+                      onChange={(e) => handleCurrencyChange(e.target.value)}
+                      className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-none cursor-pointer focus:border-violet-500"
                     >
                       {currencyOptions.map((c) => (
                         <option key={c.code} value={c.code}>
@@ -629,28 +744,52 @@ export default function CreateTrip() {
                   </div>
                 </div>
 
-                <div className="mb-4 flex items-baseline justify-between">
-                  <span className="text-xs text-slate-500">Total estimated budget:</span>
-                  <span className="text-2xl font-black text-violet-700">
-                    {activeCurrencySymbol}
-                    {Number(form.budget).toLocaleString()}
-                  </span>
-                </div>
-
-                {/* Slider */}
-                <input
-                  type="range"
-                  min="300"
-                  max="15000"
-                  step="50"
-                  value={form.budget}
-                  onChange={(e) => updateField('budget', Number(e.target.value))}
-                  className="w-full accent-violet-600 cursor-pointer"
-                />
-                <div className="flex justify-between text-[11px] text-slate-400 mt-1">
-                  <span>{activeCurrencySymbol}300</span>
-                  <span>{activeCurrencySymbol}5,000</span>
-                  <span>{activeCurrencySymbol}15,000+</span>
+                {/* Budget Input Box */}
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Enter Budget Amount <span className="text-violet-600">*</span>
+                    </label>
+                    <span className="text-[11px] font-bold text-violet-700">
+                      Minimum required: {activeCurrencySymbol}{(CURRENCY_CONFIG[form.currency]?.min || 10000).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="relative flex items-center">
+                    <span className="absolute left-4 text-lg font-bold text-violet-600 select-none">
+                      {activeCurrencySymbol}
+                    </span>
+                    <input
+                      type="number"
+                      min={CURRENCY_CONFIG[form.currency]?.min || 10000}
+                      step={CURRENCY_CONFIG[form.currency]?.step || 500}
+                      value={form.budget === 0 ? '' : form.budget}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10)
+                        updateField('budget', isNaN(val) ? 0 : Math.max(0, val))
+                      }}
+                      onBlur={() => {
+                        const minBudget = CURRENCY_CONFIG[form.currency]?.min || 10000
+                        if (form.budget < minBudget) {
+                          updateField('budget', minBudget)
+                        }
+                      }}
+                      placeholder={CURRENCY_CONFIG[form.currency]?.placeholder || 'e.g. 10000'}
+                      className={`w-full rounded-2xl border bg-slate-50/50 pl-11 pr-24 py-3.5 text-lg font-black text-slate-900 outline-none transition-colors focus:bg-white focus:ring-3 ${
+                        form.budget < (CURRENCY_CONFIG[form.currency]?.min || 10000)
+                          ? 'border-red-400 focus:border-red-500 focus:ring-red-500/10'
+                          : 'border-slate-200 focus:border-violet-600 focus:ring-violet-500/10'
+                      }`}
+                    />
+                    <div className="absolute right-3.5 flex items-center gap-1.5 rounded-xl bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700">
+                      <span>{form.currency}</span>
+                    </div>
+                  </div>
+                  {form.budget < (CURRENCY_CONFIG[form.currency]?.min || 10000) && (
+                    <p className="mt-2 flex items-center gap-1.5 text-xs font-bold text-red-600 animate-fade-in">
+                      <AlertCircle size={14} className="shrink-0" />
+                      Trips under {activeCurrencySymbol}{(CURRENCY_CONFIG[form.currency]?.min || 10000).toLocaleString()} {form.currency} are not allowed. Minimum required is {activeCurrencySymbol}{(CURRENCY_CONFIG[form.currency]?.min || 10000).toLocaleString()}.
+                    </p>
+                  )}
                 </div>
 
                 {/* Style & Pace options */}
@@ -659,7 +798,7 @@ export default function CreateTrip() {
                     <label className="block text-xs font-bold text-slate-700 mb-2">
                       Accommodation & Travel Style
                     </label>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {travelStyles.map((st) => (
                         <button
                           key={st}
@@ -681,7 +820,7 @@ export default function CreateTrip() {
                     <label className="block text-xs font-bold text-slate-700 mb-2">
                       Trip Pacing
                     </label>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {tripPaces.map((pc) => (
                         <button
                           key={pc}
@@ -713,10 +852,16 @@ export default function CreateTrip() {
                 <button
                   type="button"
                   onClick={handleNext}
-                  className="inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold text-white shadow-md transition-all hover:opacity-95 hover:shadow-lg active:scale-98"
+                  disabled={Number(form.budget) < (CURRENCY_CONFIG[form.currency]?.min || 10000)}
+                  className="inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold text-white shadow-md transition-all hover:opacity-95 hover:shadow-lg active:scale-98 disabled:opacity-40 disabled:cursor-not-allowed"
                   style={{
                     background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
                   }}
+                  title={
+                    Number(form.budget) < (CURRENCY_CONFIG[form.currency]?.min || 10000)
+                      ? `Minimum budget of ${activeCurrencySymbol}${(CURRENCY_CONFIG[form.currency]?.min || 10000).toLocaleString()} required`
+                      : 'Continue to Review'
+                  }
                 >
                   Review & Recommendations
                   <ArrowRight size={16} />
@@ -725,9 +870,6 @@ export default function CreateTrip() {
             </div>
           )}
 
-          {/* ============================================================
-              STEP 3: REVIEW & PERSONALIZED DESTINATION RECOMMENDATIONS
-              ============================================================ */}
           {step === 2 && (
             <div className="space-y-10 animate-fade-up">
               {/* Trip Overview Summary Card */}
@@ -747,10 +889,19 @@ export default function CreateTrip() {
 
                   <div className="text-left sm:text-right">
                     <p className="text-xs text-slate-400">Total Budget</p>
-                    <p className="text-2xl font-black text-violet-700">
+                    <p className={`text-2xl font-black ${
+                      Number(form.budget) < (CURRENCY_CONFIG[form.currency]?.min || 10000)
+                        ? 'text-red-600'
+                        : 'text-violet-700'
+                    }`}>
                       {activeCurrencySymbol}
                       {Number(form.budget).toLocaleString()} {form.currency}
                     </p>
+                    {Number(form.budget) < (CURRENCY_CONFIG[form.currency]?.min || 10000) && (
+                      <p className="text-[11px] font-bold text-red-600 mt-0.5">
+                        Below minimum ({activeCurrencySymbol}{(CURRENCY_CONFIG[form.currency]?.min || 10000).toLocaleString()})
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -813,11 +964,17 @@ export default function CreateTrip() {
                   >
                     ← Edit Details
                   </button>
+                  {Number(form.budget) < (CURRENCY_CONFIG[form.currency]?.min || 10000) && (
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-red-600">
+                      <AlertCircle size={15} className="shrink-0" />
+                      <span>Trips under {activeCurrencySymbol}{(CURRENCY_CONFIG[form.currency]?.min || 10000).toLocaleString()} {form.currency} are not allowed.</span>
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={handleFinalSubmit}
-                    disabled={submitting || justAdded}
-                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl px-7 py-3.5 text-sm font-bold text-white shadow-md transition-all hover:opacity-95 hover:shadow-lg disabled:opacity-60"
+                    disabled={submitting || justAdded || Number(form.budget) < (CURRENCY_CONFIG[form.currency]?.min || 10000)}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl px-7 py-3.5 text-sm font-bold text-white shadow-md transition-all hover:opacity-95 hover:shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{
                       background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
                     }}
@@ -842,15 +999,6 @@ export default function CreateTrip() {
                 </div>
               </div>
 
-              {/* ============================================================
-                  2. PERSONALIZED DESTINATION RECOMMENDATIONS GRID
-                  - Photographic header
-                  - Destination cards reflecting user preferences
-                  - Nature + Adventure (mountains/trekking/forests)
-                  - Culture + History (heritage/museums/historic)
-                  - Food (culinary/dining)
-                  - Relaxation (beaches/retreats/spas)
-                  ============================================================ */}
               <section className="pt-4">
                 <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>

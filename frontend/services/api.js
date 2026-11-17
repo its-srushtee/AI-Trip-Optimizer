@@ -30,9 +30,19 @@ export async function request(path, { method = 'GET', body, token } = {}) {
   }
 
   if (!res.ok) {
-    const msg = data && data.detail ? data.detail : `Request failed (${res.status})`
+    let msg = `Request failed (${res.status})`
+    if (data && data.detail) {
+      if (typeof data.detail === 'string') {
+        msg = data.detail
+      } else if (Array.isArray(data.detail)) {
+        msg = data.detail.map((e) => e.msg || JSON.stringify(e)).join(', ')
+      } else if (typeof data.detail === 'object') {
+        msg = JSON.stringify(data.detail)
+      }
+    }
     const err = new Error(msg)
     err.status = res.status
+    err.data = data
     throw err
   }
   return data
@@ -84,4 +94,10 @@ export const api = {
   destinationImage: (q) =>
     request(`/destinations/image?q=${encodeURIComponent(q)}`),
   imageProviders: () => request('/destinations/image-providers'),
+
+  searchStations: (query) => request(`/trains/stations?query=${encodeURIComponent(query || '')}`),
+  searchTrains: ({ from_station, to_station, date, currency }) =>
+    request(
+      `/trains/search?from_station=${encodeURIComponent(from_station)}&to_station=${encodeURIComponent(to_station)}&date=${encodeURIComponent(date)}&currency=${encodeURIComponent(currency || 'INR')}`
+    ),
 }

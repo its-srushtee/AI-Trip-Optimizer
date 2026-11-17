@@ -9,6 +9,7 @@ import {
   ArrowRight,
   Compass,
   MapPin,
+  Navigation,
   RefreshCw,
   Sparkles,
   Heart,
@@ -22,6 +23,7 @@ import { getUser, clearUser, saveUser } from '../lib/userStore.js'
 import { api, getToken, clearToken, resolveImageUrl } from '../services/api.js'
 import { useTripImages } from '../hooks/useTripImages.js'
 import { useSidebar } from '../hooks/useSidebar.js'
+import { currencyOptions, getCurrencySymbol, formatCurrency, getTodayDateStr, getNextDayDateStr } from '../lib/constants.js'
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -35,8 +37,8 @@ export default function Dashboard() {
   const [reload, setReload] = useState(0)
 
   // Search & filter states
+  const [fromQuery, setFromQuery] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
-  const [travelDate, setTravelDate] = useState('')
   const [selectedTag, setSelectedTag] = useState('All')
   const [favorites, setFavorites] = useState(() => {
     try {
@@ -53,6 +55,7 @@ export default function Dashboard() {
     start_date: '',
     end_date: '',
     budget: 1000,
+    currency: 'USD',
     travelers: 1,
   })
   const [savingEdit, setSavingEdit] = useState(false)
@@ -65,6 +68,7 @@ export default function Dashboard() {
       start_date: trip.start_date || '',
       end_date: trip.end_date || '',
       budget: trip.budget || 1000,
+      currency: (trip.currency || trip.preferences?.currency || 'USD').toUpperCase(),
       travelers: trip.travelers || 1,
     })
     setEditError('')
@@ -74,8 +78,30 @@ export default function Dashboard() {
     e.preventDefault()
     setSavingEdit(true)
     setEditError('')
+
+    const todayStr = getTodayDateStr()
+    if (editForm.start_date < todayStr) {
+      setEditError('Start date cannot be in the past. Please choose today or a future date.')
+      setSavingEdit(false)
+      return
+    }
+    if (editForm.end_date <= editForm.start_date) {
+      setEditError('End date cannot be the same as or earlier than the start date. A trip must be at least 1 night.')
+      setSavingEdit(false)
+      return
+    }
+
     try {
-      const updated = await api.updateTrip(editingTrip.id, editForm, getToken())
+      const targetCurr = (editForm.currency || editingTrip.currency || editingTrip.preferences?.currency || 'USD').toUpperCase()
+      const updatePayload = {
+        ...editForm,
+        currency: targetCurr,
+        preferences: {
+          ...(editingTrip.preferences || {}),
+          currency: targetCurr,
+        },
+      }
+      const updated = await api.updateTrip(editingTrip.id, updatePayload, getToken())
       setTrips((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
       setEditingTrip(null)
     } catch (err) {
@@ -171,11 +197,11 @@ export default function Dashboard() {
 
   const handleSearchSubmit = (e) => {
     e.preventDefault()
-    if (searchQuery.trim()) {
-      navigate(`/create-trip?destination=${encodeURIComponent(searchQuery)}`)
-    } else {
-      navigate('/create-trip')
-    }
+    const params = new URLSearchParams()
+    if (searchQuery.trim()) params.set('destination', searchQuery.trim())
+    if (fromQuery.trim()) params.set('origin', fromQuery.trim())
+    const qs = params.toString()
+    navigate(qs ? `/create-trip?${qs}` : '/create-trip')
   }
 
   return (
@@ -207,14 +233,6 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* ============================================================
-              1. HERO LANDING SECTION
-              - Full destination photography background
-              - Dark gradient overlay for clear contrast
-              - "Your Next Adventure Starts Here" headline
-              - "Plan a New Trip" CTA button
-              - Compact search bar for destination & dates
-              ============================================================ */}
           <section className="relative mb-8 overflow-hidden rounded-3xl shadow-lg">
             {/* Background Image */}
             <img
@@ -292,9 +310,23 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Compact Search Bar */}
-              <form onSubmit={handleSearchSubmit} className="mt-8 max-w-xl">
+              {/* Compact Search Bar: From where you want to go -> What is your destination */}
+              <form onSubmit={handleSearchSubmit} className="mt-8 max-w-2xl">
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 rounded-2xl sm:rounded-full bg-white/95 p-2 shadow-2xl backdrop-blur-xl border border-white/40">
+                  {/* Origin Input */}
+                  <div className="flex flex-1 items-center gap-2.5 px-3 py-1.5">
+                    <Navigation size={16} className="text-blue-600 shrink-0" />
+                    <input
+                      type="text"
+                      value={fromQuery}
+                      onChange={(e) => setFromQuery(e.target.value)}
+                      placeholder="From where you want to go?"
+                      className="w-full bg-transparent text-sm text-slate-800 placeholder-slate-400 outline-none"
+                    />
+                  </div>
+
+                  <div className="hidden sm:block h-6 w-px bg-slate-200" />
+
                   {/* Destination Input */}
                   <div className="flex flex-1 items-center gap-2.5 px-3 py-1.5">
                     <MapPin size={17} className="text-violet-600 shrink-0" />
@@ -302,29 +334,15 @@ export default function Dashboard() {
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Where do you want to go?"
+                      placeholder="What is your destination?"
                       className="w-full bg-transparent text-sm text-slate-800 placeholder-slate-400 outline-none"
-                    />
-                  </div>
-
-                  <div className="hidden sm:block h-6 w-px bg-slate-200" />
-
-                  {/* Dates selector input */}
-                  <div className="flex items-center gap-2 px-3 py-1.5 sm:w-44">
-                    <Calendar size={16} className="text-slate-400 shrink-0" />
-                    <input
-                      type="text"
-                      value={travelDate}
-                      onChange={(e) => setTravelDate(e.target.value)}
-                      placeholder="Travel dates?"
-                      className="w-full bg-transparent text-xs text-slate-700 placeholder-slate-400 outline-none"
                     />
                   </div>
 
                   {/* Search submit button */}
                   <button
                     type="submit"
-                    className="flex items-center justify-center gap-2 rounded-xl sm:rounded-full px-5 py-2.5 text-xs font-semibold text-white shadow-sm transition-transform active:scale-95"
+                    className="flex items-center justify-center gap-2 rounded-xl sm:rounded-full px-6 py-2.5 text-xs font-semibold text-white shadow-sm transition-transform active:scale-95"
                     style={{
                       background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
                     }}
@@ -337,9 +355,6 @@ export default function Dashboard() {
             </div>
           </section>
 
-          {/* ============================================================
-              2. UPCOMING / RECENT TRIPS SECTION (Application Data)
-              ============================================================ */}
           {trips.length > 0 && (
             <section className="mb-10">
               <div className="mb-4 flex items-center justify-between">
@@ -451,13 +466,6 @@ export default function Dashboard() {
             </section>
           )}
 
-          {/* ============================================================
-              3. DESTINATIONS & RECOMMENDATIONS SECTION
-              - Category filter pills
-              - Grid of high-res destination cards
-              - Star ratings & blurbs
-              - Direct "Plan Trip" button
-              ============================================================ */}
           <section className="mb-12">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
               <div>
@@ -614,20 +622,21 @@ export default function Dashboard() {
         </div>
 
         {/* Dashboard Edit Trip Modal */}
+        {/* Edit Trip Modal */}
         {editingTrip && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs animate-fade-in">
-            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-4">
                 <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center">
+                  <div className="h-8 w-8 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center dark:bg-violet-950/60 dark:text-violet-300">
                     <Edit3 size={15} />
                   </div>
-                  <h3 className="text-sm font-bold text-slate-900">Edit Trip</h3>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Edit Trip</h3>
                 </div>
                 <button
                   type="button"
                   onClick={() => setEditingTrip(null)}
-                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
                 >
                   <X size={16} />
                 </button>
@@ -635,7 +644,7 @@ export default function Dashboard() {
 
               <form onSubmit={handleSaveEdit} className="space-y-3.5">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Destination
                   </label>
                   <input
@@ -645,63 +654,90 @@ export default function Dashboard() {
                     onChange={(e) =>
                       setEditForm((prev) => ({ ...prev, destination: e.target.value }))
                     }
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs text-slate-800 outline-none focus:border-violet-500"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white px-3.5 py-2 text-xs text-slate-800 outline-none focus:border-violet-500"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-2.5">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                       Start Date
                     </label>
                     <input
                       type="date"
                       required
+                      min={getTodayDateStr()}
                       value={editForm.start_date}
-                      onChange={(e) =>
-                        setEditForm((prev) => ({ ...prev, start_date: e.target.value }))
-                      }
-                      className="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-violet-500"
+                      onChange={(e) => {
+                        const newStart = e.target.value
+                        setEditForm((prev) => {
+                          const nextEnd =
+                            newStart && (!prev.end_date || prev.end_date <= newStart)
+                              ? getNextDayDateStr(newStart)
+                              : prev.end_date
+                          return { ...prev, start_date: newStart, end_date: nextEnd }
+                        })
+                      }}
+                      className="w-full rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-violet-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                       End Date
                     </label>
                     <input
                       type="date"
                       required
+                      min={editForm.start_date ? getNextDayDateStr(editForm.start_date) : getNextDayDateStr(getTodayDateStr())}
                       value={editForm.end_date}
                       onChange={(e) =>
                         setEditForm((prev) => ({ ...prev, end_date: e.target.value }))
                       }
-                      className="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-violet-500"
+                      className="w-full rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-violet-500"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-3 gap-2.5">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                       Travelers
                     </label>
                     <input
                       type="number"
                       min={1}
-                      max={20}
+                      max={15}
                       value={editForm.travelers}
                       onChange={(e) =>
                         setEditForm((prev) => ({
                           ...prev,
-                          travelers: Math.max(1, parseInt(e.target.value) || 1),
+                          travelers: Math.min(15, Math.max(1, parseInt(e.target.value) || 1)),
                         }))
                       }
-                      className="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-violet-500"
+                      className="w-full rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-violet-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Budget ($ USD)
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Currency
+                    </label>
+                    <select
+                      value={editForm.currency || 'USD'}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({ ...prev, currency: e.target.value }))
+                      }
+                      className="w-full rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white px-2 py-1.5 text-xs text-slate-800 outline-none focus:border-violet-500"
+                    >
+                      {currencyOptions.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.code} ({c.symbol})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Budget ({getCurrencySymbol(editForm.currency || 'USD')})
                     </label>
                     <input
                       type="number"
@@ -714,20 +750,20 @@ export default function Dashboard() {
                           budget: Math.max(0, parseInt(e.target.value) || 0),
                         }))
                       }
-                      className="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-violet-500"
+                      className="w-full rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-violet-500"
                     />
                   </div>
                 </div>
 
                 {editError && (
-                  <p className="text-xs text-rose-600 font-medium">{editError}</p>
+                  <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">{editError}</p>
                 )}
 
-                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                   <button
                     type="button"
                     onClick={() => setEditingTrip(null)}
-                    className="rounded-xl border border-slate-200 px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                    className="rounded-xl border border-slate-200 dark:border-slate-700 px-3.5 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
                   >
                     Cancel
                   </button>

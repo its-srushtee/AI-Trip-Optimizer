@@ -7,6 +7,7 @@ import CompleteProfile from './complete-profile.jsx'
 import CreateTrip from './create-trip.jsx'
 import Trips from './trips.jsx'
 import TripDetails from './trip-details.jsx'
+import ErrorBoundary from '../components/common/ErrorBoundary.jsx'
 import { getToken } from '../services/api.js'
 
 import AuthCallback from './auth-callback.jsx'
@@ -21,76 +22,78 @@ function GuestOnly({ children }) {
 
 export default function App() {
   return (
-    <Routes>
-      <Route element={<AppLayout />}>
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route
-          path="/login"
-          element={
-            <GuestOnly>
-              <Login />
-            </GuestOnly>
-          }
-        />
-        <Route
-          path="/signup"
-          element={
-            <GuestOnly>
-              <Signup />
-            </GuestOnly>
-          }
-        />
-        <Route
-          path="/dashboard"
-          element={
-            <RequireAuth>
-              <Dashboard />
-            </RequireAuth>
-          }
-        />
+    <ErrorBoundary>
+      <Routes>
+        <Route element={<AppLayout />}>
+          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route
+            path="/login"
+            element={
+              <GuestOnly>
+                <Login />
+              </GuestOnly>
+            }
+          />
+          <Route
+            path="/signup"
+            element={
+              <GuestOnly>
+                <Signup />
+              </GuestOnly>
+            }
+          />
+          <Route
+            path="/dashboard"
+            element={
+              <RequireAuth>
+                <Dashboard />
+              </RequireAuth>
+            }
+          />
 
-        <Route 
-          path="/auth/callback" 
-          element={
-            <AuthCallback />
-          } 
-        />
+          <Route 
+            path="/auth/callback" 
+            element={
+              <AuthCallback />
+            } 
+          />
 
-        <Route
-          path="/complete-profile"
-          element={
-            <RequireAuth>
-              <CompleteProfile />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/create-trip"
-          element={
-            <RequireAuth>
-              <CreateTrip />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/trips"
-          element={
-            <RequireAuth>
-              <Trips />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/trips/:id"
-          element={
-            <RequireAuth>
-              <TripDetails />
-            </RequireAuth>
-          }
-        />
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Route>
-    </Routes>
+          <Route
+            path="/complete-profile"
+            element={
+              <RequireAuth>
+                <CompleteProfile />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/create-trip"
+            element={
+              <RequireAuth>
+                <CreateTrip />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/trips"
+            element={
+              <RequireAuth>
+                <Trips />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/trips/:id"
+            element={
+              <RequireAuth>
+                <TripDetails />
+              </RequireAuth>
+            }
+          />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Route>
+      </Routes>
+    </ErrorBoundary>
   )
 }
 

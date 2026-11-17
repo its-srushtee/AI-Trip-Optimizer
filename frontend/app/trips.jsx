@@ -25,6 +25,7 @@ import { api, getToken, clearToken, resolveImageUrl } from '../services/api.js'
 import { useTripImages } from '../hooks/useTripImages.js'
 import { clearUser, getUser } from '../lib/userStore.js'
 import { useSidebar } from '../hooks/useSidebar.js'
+import { currencyOptions, getCurrencySymbol, formatCurrency, getTodayDateStr, getNextDayDateStr } from '../lib/constants.js'
 
 const TABS = ['Upcoming Trips', 'Past Trips', 'Saved Trips']
 
@@ -115,6 +116,7 @@ export default function Trips() {
       start_date: trip.start_date || '',
       end_date: trip.end_date || '',
       budget: trip.budget || 1000,
+      currency: (trip.currency || trip.preferences?.currency || 'USD').toUpperCase(),
       travelers: trip.travelers || 1,
     })
     setEditError('')
@@ -125,8 +127,30 @@ export default function Trips() {
     e.preventDefault()
     setSavingEdit(true)
     setEditError('')
+
+    const todayStr = getTodayDateStr()
+    if (editForm.start_date < todayStr) {
+      setEditError('Start date cannot be in the past. Please choose today or a future date.')
+      setSavingEdit(false)
+      return
+    }
+    if (editForm.end_date <= editForm.start_date) {
+      setEditError('End date cannot be the same as or earlier than the start date. A trip must be at least 1 night.')
+      setSavingEdit(false)
+      return
+    }
+
     try {
-      const updated = await api.updateTrip(editingTrip.id, editForm, getToken())
+      const targetCurr = (editForm.currency || editingTrip.currency || editingTrip.preferences?.currency || 'USD').toUpperCase()
+      const updatePayload = {
+        ...editForm,
+        currency: targetCurr,
+        preferences: {
+          ...(editingTrip.preferences || {}),
+          currency: targetCurr,
+        },
+      }
+      const updated = await api.updateTrip(editingTrip.id, updatePayload, getToken())
       setTrips((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
       setEditingTrip(null)
     } catch (err) {
@@ -204,7 +228,7 @@ export default function Trips() {
           )}
 
           {/* Navigation Tabs (Upcoming Trips, Past Trips, Saved Trips) */}
-          <div className="mb-8 flex items-center gap-2 border-b border-slate-200">
+          <div className="mb-8 flex items-center gap-7 sm:gap-10 border-b border-slate-200 overflow-x-auto scrollbar-none">
             {TABS.map((tab) => {
               const active = activeTab === tab
               return (
@@ -212,7 +236,7 @@ export default function Trips() {
                   key={tab}
                   type="button"
                   onClick={() => setActiveTab(tab)}
-                  className={`relative pb-3 text-sm font-semibold transition-colors ${
+                  className={`relative px-1 pb-3.5 text-sm font-semibold whitespace-nowrap transition-colors ${
                     active ? 'text-violet-700' : 'text-slate-500 hover:text-slate-800'
                   }`}
                 >
@@ -359,7 +383,7 @@ export default function Trips() {
                           )}
                           {trip.budget && (
                             <span className="font-semibold text-slate-800">
-                              ${Number(trip.budget).toLocaleString()}
+                              {formatCurrency(trip.budget, trip.currency || trip.preferences?.currency)}
                             </span>
                           )}
                         </div>
@@ -404,9 +428,6 @@ export default function Trips() {
         </div>
       </main>
 
-      {/* ============================================================
-          TRIP DETAILS MODAL (Full Itinerary, Budget Breakdown & Days)
-          ============================================================ */}
       {selectedTrip && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
@@ -443,8 +464,8 @@ export default function Trips() {
                 </h2>
                 <p className="text-xs text-slate-300">
                   {selectedTrip.start_date || 'TBD'} – {selectedTrip.end_date || 'TBD'} ·{' '}
-                  {selectedTrip.travelers} traveler(s) · Budget: $
-                  {Number(selectedTrip.budget || 1500).toLocaleString()}
+                  {selectedTrip.travelers} traveler(s) · Budget:{' '}
+                  {formatCurrency(selectedTrip.budget || 1500, selectedTrip.currency || selectedTrip.preferences?.currency)}
                 </p>
               </div>
             </div>
@@ -461,47 +482,50 @@ export default function Trips() {
               ) : itineraryData ? (
                 <>
                   {/* Budget Allocation Breakdown */}
-                  {itineraryData.budget_breakdown && (
-                    <div className="rounded-2xl bg-slate-50 p-4 border border-slate-100">
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-1.5">
-                        <DollarSign size={14} className="text-violet-600" /> Budget Breakdown
-                      </h4>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                        <div className="rounded-xl bg-white p-3 border border-slate-200/70 shadow-2xs">
-                          <div className="flex items-center gap-1 text-slate-400 mb-1">
-                            <Plane size={12} /> Flights (30%)
+                  {itineraryData.budget_breakdown && (() => {
+                    const mCurr = (selectedTrip?.currency || selectedTrip?.preferences?.currency || itineraryData?.currency || 'USD').toUpperCase()
+                    return (
+                      <div className="rounded-2xl bg-slate-50 p-4 border border-slate-100">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-1.5">
+                          <DollarSign size={14} className="text-violet-600" /> Budget Breakdown
+                        </h4>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                          <div className="rounded-xl bg-white p-3 border border-slate-200/70 shadow-2xs">
+                            <div className="flex items-center gap-1 text-slate-400 mb-1">
+                              <Plane size={12} /> Flights (30%)
+                            </div>
+                            <p className="font-bold text-slate-800">
+                              {formatCurrency(itineraryData.budget_breakdown.flights, mCurr)}
+                            </p>
                           </div>
-                          <p className="font-bold text-slate-800">
-                            ${itineraryData.budget_breakdown.flights}
-                          </p>
-                        </div>
-                        <div className="rounded-xl bg-white p-3 border border-slate-200/70 shadow-2xs">
-                          <div className="flex items-center gap-1 text-slate-400 mb-1">
-                            <Hotel size={12} /> Stays (35%)
+                          <div className="rounded-xl bg-white p-3 border border-slate-200/70 shadow-2xs">
+                            <div className="flex items-center gap-1 text-slate-400 mb-1">
+                              <Hotel size={12} /> Stays (35%)
+                            </div>
+                            <p className="font-bold text-slate-800">
+                              {formatCurrency(itineraryData.budget_breakdown.stay, mCurr)}
+                            </p>
                           </div>
-                          <p className="font-bold text-slate-800">
-                            ${itineraryData.budget_breakdown.stay}
-                          </p>
-                        </div>
-                        <div className="rounded-xl bg-white p-3 border border-slate-200/70 shadow-2xs">
-                          <div className="flex items-center gap-1 text-slate-400 mb-1">
-                            <Utensils size={12} /> Food (15%)
+                          <div className="rounded-xl bg-white p-3 border border-slate-200/70 shadow-2xs">
+                            <div className="flex items-center gap-1 text-slate-400 mb-1">
+                              <Utensils size={12} /> Food (15%)
+                            </div>
+                            <p className="font-bold text-slate-800">
+                              {formatCurrency(itineraryData.budget_breakdown.food, mCurr)}
+                            </p>
                           </div>
-                          <p className="font-bold text-slate-800">
-                            ${itineraryData.budget_breakdown.food}
-                          </p>
-                        </div>
-                        <div className="rounded-xl bg-white p-3 border border-slate-200/70 shadow-2xs">
-                          <div className="flex items-center gap-1 text-slate-400 mb-1">
-                            <Activity size={12} /> Activities (20%)
+                          <div className="rounded-xl bg-white p-3 border border-slate-200/70 shadow-2xs">
+                            <div className="flex items-center gap-1 text-slate-400 mb-1">
+                              <Activity size={12} /> Activities (20%)
+                            </div>
+                            <p className="font-bold text-slate-800">
+                              {formatCurrency(itineraryData.budget_breakdown.activities, mCurr)}
+                            </p>
                           </div>
-                          <p className="font-bold text-slate-800">
-                            ${itineraryData.budget_breakdown.activities}
-                          </p>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )
+                  })()}
 
                   {/* Summary */}
                   {itineraryData.summary && (
@@ -527,7 +551,7 @@ export default function Trips() {
                                 Day {day.day}: {day.theme}
                               </span>
                               <span className="text-[11px] text-slate-400">
-                                {day.date} · est. ${day.estimate_usd}
+                                {day.date} · est. {formatCurrency(day.estimate_cost || day.estimate_usd, selectedTrip.currency || selectedTrip.preferences?.currency || itineraryData.currency)}
                               </span>
                             </div>
                             <div className="grid gap-2 text-xs text-slate-600 sm:grid-cols-3">
@@ -579,9 +603,6 @@ export default function Trips() {
         </div>
       )}
 
-      {/* ============================================================
-          EDIT TRIP MODAL
-          ============================================================ */}
       {editingTrip && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
@@ -627,8 +648,18 @@ export default function Trips() {
                   <input
                     type="date"
                     required
+                    min={getTodayDateStr()}
                     value={editForm.start_date}
-                    onChange={(e) => setEditForm({ ...editForm, start_date: e.target.value })}
+                    onChange={(e) => {
+                      const newStart = e.target.value
+                      setEditForm((prev) => {
+                        const nextEnd =
+                          newStart && (!prev.end_date || prev.end_date <= newStart)
+                            ? getNextDayDateStr(newStart)
+                            : prev.end_date
+                        return { ...prev, start_date: newStart, end_date: nextEnd }
+                      })
+                    }}
                     className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 outline-none focus:border-violet-500"
                   />
                 </div>
@@ -637,6 +668,7 @@ export default function Trips() {
                   <input
                     type="date"
                     required
+                    min={editForm.start_date ? getNextDayDateStr(editForm.start_date) : getNextDayDateStr(getTodayDateStr())}
                     value={editForm.end_date}
                     onChange={(e) => setEditForm({ ...editForm, end_date: e.target.value })}
                     className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 outline-none focus:border-violet-500"
@@ -644,7 +676,7 @@ export default function Trips() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Travelers</label>
                   <input
@@ -658,12 +690,26 @@ export default function Trips() {
                   />
                 </div>
                 <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Currency</label>
+                  <select
+                    value={editForm.currency || 'USD'}
+                    onChange={(e) => setEditForm({ ...editForm, currency: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 px-2 py-2 text-xs text-slate-800 outline-none focus:border-violet-500"
+                  >
+                    {currencyOptions.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.code} ({c.symbol})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Budget (USD)
+                    Budget ({getCurrencySymbol(editForm.currency || 'USD')})
                   </label>
                   <input
                     type="number"
-                    min="100"
+                    min="1"
                     step="50"
                     value={editForm.budget}
                     onChange={(e) =>

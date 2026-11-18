@@ -8,10 +8,22 @@ export function recommend(destinations, prefs) {
   const list = destinations || []
   const hasPrefs = prefs && (prefs.interests?.length > 0 || prefs.style || prefs.pace)
 
+  // If already scored by backend recommendation engine, respect backend's multi-factor order
+  const hasBackendScores = list.some((d) => typeof d.match_score === 'number' || Array.isArray(d.match_reasons))
+  if (hasBackendScores) {
+    return {
+      personalized: Boolean(hasPrefs),
+      picks: list.map((d) => ({
+        ...d,
+        match: d.match_score ?? (hasPrefs ? 88 : null),
+      })),
+    }
+  }
+
   if (!hasPrefs) {
     return {
       personalized: false,
-      picks: list.slice(0, 4).map((d) => ({ ...d, match: null })),
+      picks: list.slice(0, 8).map((d) => ({ ...d, match: null })),
     }
   }
 

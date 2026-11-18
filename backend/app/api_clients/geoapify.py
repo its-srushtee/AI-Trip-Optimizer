@@ -16,23 +16,32 @@ logger = logging.getLogger(__name__)
 
 # Category mapping from user interests to Geoapify place categories
 INTEREST_TO_GEOAPIFY_CATEGORIES = {
-    "nature": "natural,natural.forest,natural.water,leisure.park",
-    "adventure": "activity,activity.sport_club,leisure.park,tourism.attraction",
+    "nature": "natural,natural.forest,natural.mountain,natural.water,leisure.park",
+    "adventure": "activity,activity.sport_club,leisure.park,tourism.attraction,natural.mountain",
     "history": "heritage,heritage.unesco,building.historic,tourism.sights",
-    "culture": "entertainment.museum,entertainment.culture,heritage,tourism.sights",
-    "food": "catering.restaurant,catering.cafe,catering.fast_food",
-    "beaches": "natural.water,leisure.park,tourism.attraction",
-    "relaxation": "leisure.spa,leisure.park,natural",
-    "photography": "tourism.sights,tourism.attraction,leisure.park",
-    "shopping": "commercial.shopping_mall,commercial.marketplace",
-    "nightlife": "adult.nightclub,catering.bar,catering.pub",
+    "culture": "entertainment.museum,entertainment.culture,heritage,tourism.sights,religion.place_of_worship",
+    "food": "catering.restaurant,catering.cafe,commercial.marketplace",
+    "beaches": "natural.water,beach,beach.beach_resort,leisure.park,tourism.attraction",
+    "mountains": "natural.mountain,natural,activity,tourism.attraction",
+    "waterfalls": "natural.water,natural",
+    "religious": "religion.place_of_worship,building.place_of_worship",
+    "spirituality": "religion.place_of_worship,building.place_of_worship,heritage",
+    "relaxation": "leisure.spa,leisure.park,natural,natural.water",
+    "photography": "tourism.sights,tourism.attraction,leisure.park,natural.mountain,natural.water",
+    "shopping": "commercial.shopping_mall,commercial.marketplace,commercial.supermarket",
+    "nightlife": "catering.bar,catering.pub,entertainment",
+    "entertainment": "entertainment,entertainment.theme_park,entertainment.cinema,leisure.park",
 }
 
-DEFAULT_CATEGORIES = "tourism.sights,tourism.attraction,entertainment.museum,heritage"
+DEFAULT_CATEGORIES = (
+    "tourism.sights,tourism.attraction,entertainment.museum,heritage,natural,"
+    "natural.water,natural.mountain,leisure.park,religion.place_of_worship"
+)
 
 
 class GeoapifyClient:
     BASE_GEOCODE_URL = "https://api.geoapify.com/v1/geocode/search"
+    BASE_AUTOCOMPLETE_URL = "https://api.geoapify.com/v1/geocode/autocomplete"
     BASE_PLACES_URL = "https://api.geoapify.com/v2/places"
 
     def __init__(self, api_key: str | None = None):
@@ -40,6 +49,65 @@ class GeoapifyClient:
 
     def is_configured(self) -> bool:
         return bool(self.api_key)
+
+    def autocomplete(self, query: str, limit: int = 8) -> list[dict[str, Any]]:
+        """Autocomplete any destination worldwide (city, island, town, region, country)."""
+        if not self.is_configured() or not query or len(query.strip()) < 2:
+            return []
+
+        clean_query = query.strip()
+        params = {
+            "text": clean_query,
+            "apiKey": self.api_key,
+            "limit": max(1, min(limit, 20)),
+            "lang": "en",
+        }
+
+        try:
+            with httpx.Client(timeout=6.0) as client:
+                resp = client.get(self.BASE_AUTOCOMPLETE_URL, params=params)
+                if resp.status_code != 200:
+                    logger.warning("Geoapify autocomplete HTTP %s for '%s'", resp.status_code, clean_query)
+                    return []
+
+                features = resp.json().get("features", [])
+                results = []
+                seen_places = set()
+
+                for feat in features:
+                    props = feat.get("properties", {})
+                    geom = feat.get("geometry", {})
+                    coords = geom.get("coordinates", [])
+
+                    city = props.get("city") or props.get("town") or props.get("village") or props.get("county") or props.get("name") or clean_query
+                    country = props.get("country", "")
+                    state = props.get("state") or props.get("region") or ""
+                    key = f"{city.lower()}-{country.lower()}"
+                    if key in seen_places:
+                        continue
+                    seen_places.add(key)
+
+                    lon = coords[0] if len(coords) >= 2 else props.get("lon")
+                    lat = coords[1] if len(coords) >= 2 else props.get("lat")
+                    formatted = props.get("formatted") or f"{city}, {country}"
+
+                    results.append({
+                        "id": props.get("place_id") or key,
+                        "name": props.get("name") or city,
+                        "city": city,
+                        "state": state,
+                        "country": country,
+                        "country_code": (props.get("country_code") or "").upper(),
+                        "lat": round(float(lat), 5) if lat is not None else None,
+                        "lon": round(float(lon), 5) if lon is not None else None,
+                        "formatted": formatted,
+                        "category": props.get("result_type", "locality"),
+                    })
+
+                return results
+        except Exception as e:
+            logger.error("Geoapify autocomplete error for '%s': %s", clean_query, e)
+            return []
 
     def geocode(self, query: str) -> dict[str, Any] | None:
         """Geocode a destination name to coordinates, country, and formatted address."""
@@ -164,21 +232,37 @@ class GeoapifyClient:
                     p_lat = coords[1] if len(coords) >= 2 else lat
                     p_lon = coords[0] if len(coords) >= 2 else lon
 
-                    # Determine readable category
+                    # Determine granular readable category based on actual API data
                     raw_cats = props.get("categories", [])
-                    readable_category = "Sight & Attraction"
-                    if any("museum" in c for c in raw_cats):
-                        readable_category = "Museum & Art"
-                    elif any("historic" in c or "heritage" in c for c in raw_cats):
+                    raw_cats_str = " ".join(raw_cats).lower()
+                    name_lower = name.lower()
+
+                    if any(w in raw_cats_str for w in ["waterfall", "natural.waterfall"]) or "waterfall" in name_lower or "falls" in name_lower:
+                        readable_category = "Waterfalls & Nature"
+                    elif any(w in raw_cats_str for w in ["beach", "natural.water", "beach_resort"]) or "beach" in name_lower or "cove" in name_lower or "bay" in name_lower:
+                        readable_category = "Beaches & Coastal"
+                    elif any(w in raw_cats_str for w in ["mountain", "peak", "glacier"]) or "peak" in name_lower or "mountain" in name_lower or "pass" in name_lower:
+                        readable_category = "Mountains & Peaks"
+                    elif any(w in raw_cats_str for w in ["temple", "church", "religion", "mosque", "monastery", "worship"]) or any(w in name_lower for w in ["temple", "church", "cathedral", "monastery", "basilica", "mosque", "gurudwara"]):
+                        readable_category = "Religious & Spiritual Sights"
+                    elif any(w in raw_cats_str for w in ["museum", "art_gallery"]):
+                        readable_category = "Museum & Arts"
+                    elif any(w in raw_cats_str for w in ["historic", "heritage", "unesco", "castle", "monument", "fort"]) or any(w in name_lower for w in ["fort", "palace", "ruins", "monument", "citadel"]):
                         readable_category = "History & Heritage"
-                    elif any("natural" in c for c in raw_cats):
-                        readable_category = "Nature & Scenic"
-                    elif any("restaurant" in c or "cafe" in c or "catering" in c for c in raw_cats):
-                        readable_category = "Food & Dining"
-                    elif any("park" in c or "leisure" in c for c in raw_cats):
-                        readable_category = "Parks & Outdoors"
-                    elif any("activity" in c or "sport" in c for c in raw_cats):
+                    elif any(w in raw_cats_str for w in ["shopping", "marketplace", "commercial.shopping_mall"]) or "bazaar" in name_lower or "market" in name_lower:
+                        readable_category = "Shopping & Bazaars"
+                    elif any(w in raw_cats_str for w in ["restaurant", "cafe", "catering"]):
+                        readable_category = "Restaurants & Dining"
+                    elif any(w in raw_cats_str for w in ["sport", "activity", "theme_park"]):
                         readable_category = "Adventure & Outdoors"
+                    elif any(w in raw_cats_str for w in ["park", "garden", "leisure.park"]):
+                        readable_category = "Parks & Gardens"
+                    elif any(w in raw_cats_str for w in ["nightclub", "bar", "pub"]):
+                        readable_category = "Entertainment & Nightlife"
+                    elif any(w in raw_cats_str for w in ["natural"]):
+                        readable_category = "Nature & Scenic"
+                    else:
+                        readable_category = "Cultural & Landmark Sights"
 
                     address = props.get("formatted") or props.get("address_line2") or props.get("street") or ""
                     city_name = props.get("city") or props.get("suburb") or ""

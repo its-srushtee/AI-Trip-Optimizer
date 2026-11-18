@@ -1,9 +1,39 @@
 """Destination catalogue: seed + list."""
+import logging
+import os
+import re
 from typing import Any
 from sqlalchemy.orm import Session
 
 from app.api_clients.currency import CURRENCY_SYMBOLS, currency_client
+from app.api_clients.geoapify import geoapify_client
 from app.models.destination import Destination
+from app.models.destination_cache import DestinationInfoCache
+from app.models.image_cache import ImageCache
+from app.services.image_service import (
+    _IMAGES_DIR,
+    get_fallback_image,
+    is_valid_image_url,
+    resolve as resolve_image,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_image_url(db: Session, name: str, img_url: str | None, allow_remote: bool = False) -> str:
+    """Ensure destination image URL is either a valid remote URL or an existing local file.
+    Fast non-blocking lookup: uses existing file, remote URL, or cached image without delaying the response.
+    """
+    if is_valid_image_url(img_url):
+        return img_url.strip()
+    # Local file missing on disk: check database image cache (or provider if allow_remote=True)
+    try:
+        resolved = resolve_image(db, name, allow_remote=allow_remote)
+        if resolved and is_valid_image_url(resolved.get("url")) and resolved["url"] != get_fallback_image():
+            return resolved["url"]
+    except Exception as e:
+        logger.debug("Safe image fallback resolution error for %s: %s", name, e)
+    return get_fallback_image()
 
 DESTINATIONS: list[dict[str, Any]] = [
     {
@@ -95,20 +125,136 @@ def seed_destinations(db: Session) -> int:
 
 def list_destinations(db: Session) -> list[dict]:
     rows = db.query(Destination).order_by(Destination.name).all()
-    return [
-        {
+    cached_images = {c.query: c.url for c in db.query(ImageCache).all()}
+    out = []
+    for d in rows:
+        img = d.image_url
+        if not is_valid_image_url(img):
+            norm_name = re.sub(r"[^a-z0-9 ]+", "", (d.name or "").lower()).strip()
+            cached_url = cached_images.get(norm_name)
+            img = cached_url if is_valid_image_url(cached_url) else get_fallback_image()
+        out.append({
             "id": d.slug,
             "name": d.name,
             "country": d.country,
-            "image_url": d.image_url,
+            "image_url": img,
             "tags": d.tags,
             "styles": d.styles,
             "paces": d.paces,
             "price": d.price_label,
             "blurb": d.blurb,
-        }
-        for d in rows
-    ]
+        })
+    return out
+
+
+def search_destinations_dynamic(db: Session, query: str, limit: int = 8) -> list[dict[str, Any]]:
+    """Dynamically searches and autocompletes any destination worldwide.
+
+    1. Live Geoapify Autocomplete across cities, towns, regions, islands worldwide.
+    2. Dynamic image resolution via image_service for photo previews.
+    3. Merges database-cached destination intelligence.
+    """
+    from app.services.image_service import resolve as resolve_image
+
+    clean_q = (query or "").strip()
+    if not clean_q or len(clean_q) < 2:
+        return []
+
+    results: list[dict[str, Any]] = []
+    seen = set()
+
+    # 1. Live Geoapify Autocomplete
+    if geoapify_client.is_configured():
+        try:
+            geo_results = geoapify_client.autocomplete(clean_q, limit=limit)
+            for g in geo_results:
+                city_name = g.get("name") or g.get("city") or clean_q
+                country_name = g.get("country", "")
+                key = f"{city_name.lower()}-{country_name.lower()}"
+                if key in seen:
+                    continue
+                seen.add(key)
+
+                img_info = resolve_image(db, city_name, allow_remote=True)
+                img_url = img_info.get("url") if isinstance(img_info, dict) else "/images/hero.jpg"
+
+                results.append({
+                    "id": g.get("id") or key,
+                    "name": city_name,
+                    "city": g.get("city") or city_name,
+                    "state": g.get("state", ""),
+                    "country": country_name,
+                    "country_code": g.get("country_code", ""),
+                    "lat": g.get("lat"),
+                    "lon": g.get("lon"),
+                    "formatted": g.get("formatted") or f"{city_name}, {country_name}",
+                    "image_url": img_url,
+                    "source": "Geoapify Live Autocomplete",
+                })
+                if len(results) >= limit:
+                    return results
+        except Exception as e:
+            logger.debug("Geoapify autocomplete exception: %s", e)
+
+    # 2. Database Cached Destination Info
+    try:
+        cached_rows = (
+            db.query(DestinationInfoCache)
+            .filter(DestinationInfoCache.destination_name.ilike(f"%{clean_q}%"))
+            .limit(limit)
+            .all()
+        )
+        for r in cached_rows:
+            key = f"{r.destination_name.lower()}-{r.country.lower()}"
+            if key in seen:
+                continue
+            seen.add(key)
+            coords = r.coordinates or {}
+            img_info = resolve_image(db, r.destination_name, allow_remote=True)
+            img_url = img_info.get("url") if isinstance(img_info, dict) else "/images/hero.jpg"
+            results.append({
+                "id": r.query_key,
+                "name": r.destination_name,
+                "city": r.destination_name,
+                "state": "",
+                "country": r.country,
+                "country_code": "",
+                "lat": coords.get("lat"),
+                "lon": coords.get("lon"),
+                "formatted": r.formatted_address or f"{r.destination_name}, {r.country}",
+                "image_url": img_url,
+                "source": "Database Cache",
+            })
+            if len(results) >= limit:
+                return results
+    except Exception as e:
+        logger.debug("Database destination cache query: %s", e)
+
+    # 3. Fallback direct geocoding if autocomplete returned nothing
+    if not results and geoapify_client.is_configured():
+        try:
+            g_data = geoapify_client.geocode(clean_q)
+            if g_data:
+                g_name = g_data.get("name", clean_q)
+                img_info = resolve_image(db, g_name, allow_remote=True)
+                img_url = img_info.get("url") if isinstance(img_info, dict) else "/images/hero.jpg"
+                results.append({
+                    "id": re.sub(r"[^a-z0-9]+", "-", f"{g_name}-{g_data.get('country', '')}".lower()).strip("-"),
+                    "name": g_name,
+                    "city": g_data.get("city", g_name),
+                    "state": g_data.get("state", ""),
+                    "country": g_data.get("country", ""),
+                    "country_code": g_data.get("country_code", ""),
+                    "lat": g_data.get("lat"),
+                    "lon": g_data.get("lon"),
+                    "formatted": g_data.get("formatted", clean_q),
+                    "image_url": img_url,
+                    "source": "Geoapify Live Geocoding",
+                })
+        except Exception as e:
+            logger.debug("Geoapify geocode fallback notice: %s", e)
+
+    return results
 
 
 # Semantic keyword expansion mapping for user preferences
@@ -131,7 +277,7 @@ INTEREST_KEYWORDS = {
 ADDITIONAL_DESTINATIONS: list[dict[str, Any]] = [
     {
         "id": "manali", "name": "Manali", "country": "India",
-        "image_url": "/images/alps.jpg",
+        "image_url": "https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=1200&q=80",
         "tags": ["nature", "adventure", "photography", "relaxation"],
         "styles": ["Backpacker", "Budget", "Comfort"],
         "paces": ["Fast-paced", "Packed", "Balanced", "Moderate"],
@@ -142,7 +288,7 @@ ADDITIONAL_DESTINATIONS: list[dict[str, Any]] = [
     },
     {
         "id": "jaipur", "name": "Jaipur", "country": "India",
-        "image_url": "/images/hero.jpg",
+        "image_url": "https://images.unsplash.com/photo-1599661046289-e31897846e41?auto=format&fit=crop&w=1200&q=80",
         "tags": ["history", "culture", "photography", "food", "shopping"],
         "styles": ["Budget", "Comfort", "Luxury"],
         "paces": ["Moderate", "Balanced", "Relaxed"],
@@ -153,7 +299,7 @@ ADDITIONAL_DESTINATIONS: list[dict[str, Any]] = [
     },
     {
         "id": "banff", "name": "Banff", "country": "Canada",
-        "image_url": "/images/alps.jpg",
+        "image_url": "https://images.unsplash.com/photo-1503614472-8c93d56e92ce?auto=format&fit=crop&w=1200&q=80",
         "tags": ["nature", "adventure", "photography"],
         "styles": ["Comfort", "Luxury"],
         "paces": ["Fast-paced", "Balanced", "Packed", "Moderate"],
@@ -164,7 +310,7 @@ ADDITIONAL_DESTINATIONS: list[dict[str, Any]] = [
     },
     {
         "id": "kyoto", "name": "Kyoto", "country": "Japan",
-        "image_url": "/images/tokyo.jpg",
+        "image_url": "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?auto=format&fit=crop&w=1200&q=80",
         "tags": ["culture", "history", "spirituality", "food", "photography"],
         "styles": ["Comfort", "Luxury"],
         "paces": ["Relaxed", "Balanced", "Moderate"],
@@ -175,7 +321,7 @@ ADDITIONAL_DESTINATIONS: list[dict[str, Any]] = [
     },
     {
         "id": "rome", "name": "Rome", "country": "Italy",
-        "image_url": "/images/paris.jpg",
+        "image_url": "https://images.unsplash.com/photo-1552832230-c0197dd311b5?auto=format&fit=crop&w=1200&q=80",
         "tags": ["history", "culture", "food", "photography"],
         "styles": ["Budget", "Comfort", "Luxury"],
         "paces": ["Balanced", "Packed", "Moderate"],
@@ -186,7 +332,7 @@ ADDITIONAL_DESTINATIONS: list[dict[str, Any]] = [
     },
     {
         "id": "queenstown", "name": "Queenstown", "country": "New Zealand",
-        "image_url": "/images/alps.jpg",
+        "image_url": "https://images.unsplash.com/photo-1507699622108-4be3abd695ad?auto=format&fit=crop&w=1200&q=80",
         "tags": ["adventure", "nature", "photography"],
         "styles": ["Comfort", "Luxury"],
         "paces": ["Fast-paced", "Packed", "Balanced", "Moderate"],
@@ -197,7 +343,7 @@ ADDITIONAL_DESTINATIONS: list[dict[str, Any]] = [
     },
     {
         "id": "costa-rica", "name": "Costa Rica", "country": "Central America",
-        "image_url": "/images/bali.jpg",
+        "image_url": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80",
         "tags": ["nature", "adventure", "family", "relaxation"],
         "styles": ["Backpacker", "Budget", "Comfort"],
         "paces": ["Relaxed", "Balanced", "Moderate"],
@@ -205,6 +351,39 @@ ADDITIONAL_DESTINATIONS: list[dict[str, Any]] = [
         "base_usd": 1300,
         "rating": 4.8,
         "blurb": "Pristine rainforest biodiversity, volcanic hot springs, canopy ziplines, and eco-retreats.",
+    },
+    {
+        "id": "mumbai", "name": "Mumbai", "country": "India",
+        "image_url": "https://images.unsplash.com/photo-1570168007204-dfb528c6958f?auto=format&fit=crop&w=1200&q=80",
+        "tags": ["food", "culture", "shopping", "nightlife", "photography", "beaches"],
+        "styles": ["Budget", "Comfort", "Luxury"],
+        "paces": ["Fast-paced", "Moderate", "Balanced"],
+        "price": "$600",
+        "base_usd": 600,
+        "rating": 4.8,
+        "blurb": "Dynamic coastal metropolis famed for Bollywood, Gateway of India, vibrant nightlife, street food at Chowpatty, and heritage bazaars.",
+    },
+    {
+        "id": "kerala", "name": "Kerala", "country": "India",
+        "image_url": "https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?auto=format&fit=crop&w=1200&q=80",
+        "tags": ["nature", "relaxation", "beaches", "adventure", "culture", "food"],
+        "styles": ["Comfort", "Luxury", "Budget"],
+        "paces": ["Relaxed", "Moderate", "Balanced"],
+        "price": "$700",
+        "base_usd": 700,
+        "rating": 4.9,
+        "blurb": "God's Own Country, famed for serene Alleppey backwater houseboats, Munnar tea hills, Varkala cliff beaches, and Ayurvedic rejuvenation.",
+    },
+    {
+        "id": "varanasi", "name": "Varanasi", "country": "India",
+        "image_url": "https://images.unsplash.com/photo-1561361513-2d000a50f0dc?auto=format&fit=crop&w=1200&q=80",
+        "tags": ["spirituality", "culture", "history", "photography", "food", "shopping"],
+        "styles": ["Backpacker", "Budget", "Comfort"],
+        "paces": ["Moderate", "Relaxed", "Balanced"],
+        "price": "$400",
+        "base_usd": 400,
+        "rating": 4.9,
+        "blurb": "The world's oldest living spiritual city on the sacred Ganges, celebrated for Kashi Vishwanath, evening Ganga Aarti, sunrise boat rituals, and Banarasi silk.",
     },
 ]
 
@@ -224,8 +403,6 @@ def recommend_destinations(
 ) -> list[dict]:
     """Generates personalized destination recommendations reflecting user preferences,
     budget, duration, travelers, and free-text destination search."""
-    from app.services.image_service import resolve as resolve_image
-
     interests = [i.lower().strip() for i in (interests or []) if i]
     dest_query = (destination_query or "").strip().lower()
     target_currency = (currency or "USD").upper()
@@ -234,17 +411,26 @@ def recommend_destinations(
     # Collect all base destinations
     candidates = []
     db_destinations = db.query(Destination).all()
+    cached_images = {c.query: c.url for c in db.query(ImageCache).all()}
+
     for d in db_destinations:
         try:
             raw_usd = int("".join(c for c in (d.price_label or "") if c.isdigit())) or 1200
         except ValueError:
             raw_usd = 1200
         conv = currency_client.convert(raw_usd, "USD", target_currency)
+
+        img = d.image_url
+        if not is_valid_image_url(img):
+            norm_name = re.sub(r"[^a-z0-9 ]+", "", (d.name or "").lower()).strip()
+            cached_url = cached_images.get(norm_name)
+            img = cached_url if is_valid_image_url(cached_url) else get_fallback_image()
+
         candidates.append({
             "id": d.slug,
             "name": d.name,
             "country": d.country,
-            "image_url": d.image_url,
+            "image_url": img,
             "tags": d.tags or [],
             "styles": d.styles or [],
             "paces": d.paces or [],

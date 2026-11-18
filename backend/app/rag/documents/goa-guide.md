@@ -7,6 +7,7 @@
 - **Dudhsagar Waterfalls** — Four-tiered 310m white cascade located in Bhagwan Mahaveer Sanctuary, accessible via thrilling jungle safari jeep tracks.
 - **Basilica of Bom Jesus & Se Cathedral** — UNESCO World Heritage Portuguese baroque shrines in Old Goa housing the sacred relics of St. Francis Xavier.
 - **Fontainhas Latin Quarter** — Historic heritage precinct in Panaji with cobblestone streets, Portuguese-style pastel yellow and blue villas, and artisanal cafes.
+- **Tito's Lane & Anjuna Beach Clubs** — Famous coastal nightlife hub with beachfront music lounges, open-air dance clubs, and evening entertainment.
 - **Reis Magos Fort & Estuary** — Fully restored 16th-century fortress overlooking the Mandovi river mouth.
 
 ## Beaches, Relaxation & Wellness

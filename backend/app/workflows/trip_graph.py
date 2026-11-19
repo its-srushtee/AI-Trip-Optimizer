@@ -3,7 +3,12 @@
 Enforces budget as the primary constraint across the entire pipeline.
 Uses LangGraph when installed, otherwise falls back to sequential execution.
 """
-from typing import Any
+from typing import Any, cast
+
+try:
+    from typing_extensions import TypedDict
+except ImportError:
+    from typing import TypedDict  # type: ignore[assignment]
 
 from app.agents import (
     CostAgent,
@@ -53,16 +58,51 @@ NODE_SEQUENCE = [
     ("itinerary", itinerary_node),
 ]
 
+class GraphState(TypedDict, total=False):
+    request: dict[str, Any]
+    destination: dict[str, Any]
+    itinerary: dict[str, Any]
+    places: list[dict[str, Any]]
+    hotels: list[dict[str, Any]]
+    flights: list[dict[str, Any]]
+    weather: dict[str, Any]
+    cost: dict[str, Any]
+    budget: dict[str, Any]
+    error: str
+
+class _FallbackStateGraph:
+    """Fallback mock for StateGraph when langgraph is not installed."""
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def add_node(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def add_edge(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def set_entry_point(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def compile(self) -> Any:
+        return self
+
+    def invoke(self, state: dict[str, Any]) -> dict[str, Any]:
+        return _run_sequential(state)
+
+
 try:
     from langgraph.graph import END, StateGraph
 
     LANGGRAPH_AVAILABLE = True
 except ImportError:  # pragma: no cover
     LANGGRAPH_AVAILABLE = False
+    StateGraph = _FallbackStateGraph  # type: ignore[misc, assignment]
+    END = "__end__"  # type: ignore
 
 
 def _build_graph():
-    graph = StateGraph(dict)
+    graph = StateGraph(cast(Any, GraphState))
     for name, fn in NODE_SEQUENCE:
         graph.add_node(name, fn)
     names = [name for name, _ in NODE_SEQUENCE]

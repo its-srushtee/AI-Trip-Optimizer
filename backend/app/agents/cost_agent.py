@@ -46,6 +46,8 @@ def is_domestic_trip(origin: str | None, destination: str | None, currency: str 
         "maldives", "male", "thailand", "bangkok", "rome", "italy", "spain",
         "madrid", "barcelona", "toronto", "canada", "sydney", "australia",
         "europe", "america", "africa", "new zealand", "vietnam", "greece",
+        "cape town", "south africa", "vancouver", "cairo", "egypt", "turkey",
+        "philippines", "palawan", "malaysia", "nepal", "sri lanka",
     ]
     if any(fk in dest_l for fk in foreign_keys):
         return False
@@ -62,10 +64,6 @@ def is_domestic_trip(origin: str | None, destination: str | None, currency: str 
 
     # Same city / localized intra-region
     if orig_l and dest_l and orig_l == dest_l:
-        return True
-
-    # If currency is INR and neither destination nor origin matches foreign keywords
-    if str(currency).upper() == "INR" and not any(fk in dest_l for fk in foreign_keys):
         return True
 
     return False
@@ -285,11 +283,18 @@ class CostAgent(BaseAgent):
                     break
 
         # Preference & Feasibility selection:
-        # If domestic and budget is constrained, prefer train or economical transport
-        if domestic and train_fare_found and (flight_fare_found is None or (flight_fare_found * travelers > alloc["transport_target"])):
+        # If flight cost exceeds the allocated transport share or exceeds 50% of the entire budget,
+        # it is flagged as infeasible and replaced by affordable rail/transit.
+        flight_cost_total = (flight_fare_found or 0) * travelers
+        target_trans_cap = alloc["transport_target"]
+        flight_exceeds_budget = bool(
+            flight_fare_found and (flight_cost_total > target_trans_cap * 1.4 or flight_cost_total > target_budget * 0.5)
+        )
+
+        if domestic and train_fare_found and (flight_fare_found is None or flight_exceeds_budget):
             selected_transport_per_person = train_fare_found
             selected_transport_mode = "Train"
-        elif flight_fare_found:
+        elif flight_fare_found and not flight_exceeds_budget:
             selected_transport_per_person = flight_fare_found
             selected_transport_mode = "Flight"
         elif train_fare_found:
@@ -299,13 +304,12 @@ class CostAgent(BaseAgent):
             # Baseline estimation tailored to budget and domestic status
             if domestic:
                 # Domestic roundtrip in user currency
-                # Budget trips: ~₹1,200 - ₹2,500 train/bus; Comfort: ~₹3,500 - ₹5,500 flight/train
                 if target_budget < 30000:
                     base_inr = 1250
-                    selected_transport_mode = "Train / Regional Transit"
+                    selected_transport_mode = "Superfast Train / Express Transit"
                 elif target_budget < 60000:
                     base_inr = 2800
-                    selected_transport_mode = "Train (AC) / Economy Flight"
+                    selected_transport_mode = "Train (AC) / Regional Transit"
                 elif "Luxury" in style:
                     base_inr = 9500
                     selected_transport_mode = "Prime Flight"

@@ -101,23 +101,23 @@ class WeatherAgent(BaseAgent):
         month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
         month_name = month_names[month - 1]
 
-        # Check destination keywords for popular climates
-        city_lower = city.lower()
-        if any(w in city_lower for w in ["goa", "bali", "phuket", "maldives", "hawaii", "caribbean", "cancun"]):
-            # Tropical
-            if month in [6, 7, 8, 9] and any(w in city_lower for w in ["goa", "phuket"]):
+        # Check latitude and month for tropical / monsoon climate without hardcoded city names
+        is_tropical = (lat is not None and abs(lat) <= 23.5)
+        if is_tropical:
+            # Tropical monsoon zone (e.g. South/Southeast Asia between 5°N and 26°N during June-Sept)
+            if lat is not None and 5.0 <= lat <= 26.0 and month in [6, 7, 8, 9]:
                 return {
                     "season": f"Monsoon ({month_name})",
                     "typical_temp_c": 28,
                     "temp_range": "24°C – 30°C",
-                    "condition": "Tropical showers with warm coastal breezes",
+                    "condition": "Tropical showers with warm breezes",
                     "packing_advice": "Waterproof jacket, umbrella, quick-dry clothing, and breathable footwear.",
                 }
             return {
-                "season": f"Tropical Dry Season ({month_name})",
+                "season": f"Tropical Season ({month_name})",
                 "typical_temp_c": 30,
                 "temp_range": "25°C – 32°C",
-                "condition": "Sunny, warm, and tropical with light sea breezes",
+                "condition": "Sunny, warm, and tropical with light breezes",
                 "packing_advice": "Lightweight breathable fabrics, swimwear, sunglasses, and high-SPF sunscreen.",
             }
 

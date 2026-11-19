@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   MapPin,
@@ -19,6 +19,10 @@ import {
   Sliders,
   ShieldCheck,
   Info,
+  Loader2,
+  Search,
+  Plus,
+  X,
 } from 'lucide-react'
 import Sidebar from '../components/common/Sidebar.jsx'
 import { useSidebar } from '../hooks/useSidebar.js'
@@ -75,8 +79,9 @@ export default function CreateTrip() {
     currency: defaultCurrency,
     travelers: 2,
     selectedInterests: userPrefs.interests || ['nature', 'adventure'],
+    selectedTravelOption: userPrefs.style || 'Comfort',
     travelStyle: userPrefs.style || 'Comfort',
-    tripPace: userPrefs.pace || 'Balanced',
+    tripPace: userPrefs.pace || 'Moderate',
     dietary: userPrefs.food || 'No preference',
     accessibility: 'None required',
     specialRequests: '',
@@ -133,6 +138,168 @@ export default function CreateTrip() {
     }
     updateField('currency', newCurrency)
   }
+
+  // Dynamic Destination-Based Preferences state
+  const [availablePreferences, setAvailablePreferences] = useState([])
+  const [loadingPreferences, setLoadingPreferences] = useState(false)
+  const [preferencesMessage, setPreferencesMessage] = useState('')
+  const [preferencesError, setPreferencesError] = useState('')
+  const preferenceRequestIdRef = useRef(0)
+
+  // Live dynamic destination autocomplete
+  const [destSuggestions, setDestSuggestions] = useState([])
+  const [loadingDestSuggestions, setLoadingDestSuggestions] = useState(false)
+  const [showDestSuggestions, setShowDestSuggestions] = useState(false)
+
+  // Live dynamic origin (departure) autocomplete
+  const [originSuggestions, setOriginSuggestions] = useState([])
+  const [loadingOriginSuggestions, setLoadingOriginSuggestions] = useState(false)
+  const [showOriginSuggestions, setShowOriginSuggestions] = useState(false)
+
+  // Custom user-added travel interest
+  const [customInterest, setCustomInterest] = useState('')
+  const [showAddCustom, setShowAddCustom] = useState(false)
+
+  // Live Destination autocomplete fetcher
+  useEffect(() => {
+    const q = (form.destination || '').trim()
+    if (q.length < 2) {
+      setDestSuggestions([])
+      setLoadingDestSuggestions(false)
+      setShowDestSuggestions(false)
+      return
+    }
+    const timer = setTimeout(async () => {
+      setLoadingDestSuggestions(true)
+      try {
+        const results = await api.autocompleteDestinations(q)
+        if (Array.isArray(results)) {
+          setDestSuggestions(results)
+        }
+      } catch (e) {
+        console.debug('Destination autocomplete error:', e)
+      } finally {
+        setLoadingDestSuggestions(false)
+      }
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [form.destination])
+
+  // Live Origin autocomplete fetcher
+  useEffect(() => {
+    const q = (form.origin || '').trim()
+    if (q.length < 2) {
+      setOriginSuggestions([])
+      setLoadingOriginSuggestions(false)
+      setShowOriginSuggestions(false)
+      return
+    }
+    const timer = setTimeout(async () => {
+      setLoadingOriginSuggestions(true)
+      try {
+        const results = await api.autocompleteDestinations(q)
+        if (Array.isArray(results)) {
+          setOriginSuggestions(results)
+        }
+      } catch (e) {
+        console.debug('Origin autocomplete error:', e)
+      } finally {
+        setLoadingOriginSuggestions(false)
+      }
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [form.origin])
+
+  const handleAddCustomInterest = (e) => {
+    e?.preventDefault()
+    const clean = customInterest.trim().toLowerCase()
+    if (!clean) return
+    const id = clean.replace(/[^a-z0-9]+/g, '-')
+    const label = clean.charAt(0).toUpperCase() + clean.slice(1)
+    if (!availablePreferences.some((p) => p.id === id)) {
+      setAvailablePreferences((prev) => [
+        ...prev,
+        { id, label, emoji: '✨', count: 1 },
+      ])
+    }
+    if (!form.selectedInterests.includes(id)) {
+      setForm((prev) => ({
+        ...prev,
+        selectedInterests: [...prev.selectedInterests, id],
+      }))
+    }
+    setCustomInterest('')
+    setShowAddCustom(false)
+  }
+
+  // Dynamic destination-based preferences loader with debouncing and race-condition safety
+  useEffect(() => {
+    const dest = (form.destination || '').trim()
+
+    // 1. Initial State: No destination entered
+    if (!dest || dest.length < 2) {
+      setAvailablePreferences([])
+      setLoadingPreferences(false)
+      setPreferencesMessage('Select a destination to discover available experiences.')
+      setPreferencesError('')
+      return
+    }
+
+    // 2. Loading State & Request ID Tracking
+    setLoadingPreferences(true)
+    setPreferencesMessage('')
+    setPreferencesError('')
+    const currentRequestId = ++preferenceRequestIdRef.current
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.getDestinationPreferences(dest)
+
+        // Prevent race condition: ignore if destination changed while waiting
+        if (currentRequestId !== preferenceRequestIdRef.current) return
+
+        if (res && res.supported && Array.isArray(res.preferences) && res.preferences.length > 0) {
+          setAvailablePreferences(res.preferences)
+          setPreferencesMessage('')
+          setPreferencesError('')
+
+          // Preserve selections that are still relevant to this destination, remove unsupported ones
+          const supportedIdSet = new Set(res.preferences.map((p) => p.id))
+          setForm((prev) => {
+            const preserved = prev.selectedInterests.filter((id) => supportedIdSet.has(id))
+            // If user had no previous selections matching this destination, auto-select top 2 experiences
+            const finalInterests = preserved.length > 0
+              ? preserved
+              : res.preferences.slice(0, 2).map((p) => p.id)
+            return {
+              ...prev,
+              selectedInterests: finalInterests,
+            }
+          })
+        } else {
+          // Destination not recognized or no activities found
+          setAvailablePreferences([])
+          setPreferencesMessage('')
+          setPreferencesError(
+            res?.message || `No activity data found for "${dest}". Please verify the destination name.`
+          )
+          // Clear stale selections
+          setForm((prev) => ({ ...prev, selectedInterests: [] }))
+        }
+      } catch (err) {
+        if (currentRequestId !== preferenceRequestIdRef.current) return
+        setAvailablePreferences([])
+        setPreferencesMessage('')
+        setPreferencesError(`Could not load activities for "${dest}". Please check destination spelling.`)
+      } finally {
+        if (currentRequestId === preferenceRequestIdRef.current) {
+          setLoadingPreferences(false)
+        }
+      }
+    }, 350)
+
+    return () => clearTimeout(timer)
+  }, [form.destination])
 
   // Toggle interest chip
   const toggleInterest = (id) => {
@@ -445,7 +612,8 @@ export default function CreateTrip() {
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
+                  {/* Origin / Departure Input with Live Autocomplete */}
+                  <div className="relative">
                     <label className="block text-xs font-bold text-slate-700 mb-1.5">
                       From where you want to go <span className="font-normal text-slate-400">(Departure)</span>
                     </label>
@@ -457,14 +625,61 @@ export default function CreateTrip() {
                       <input
                         type="text"
                         value={form.origin}
-                        onChange={(e) => updateField('origin', e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          updateField('origin', val)
+                          if (val.trim().length >= 2) {
+                            setShowOriginSuggestions(true)
+                          } else {
+                            setShowOriginSuggestions(false)
+                            setOriginSuggestions([])
+                          }
+                        }}
+                        onFocus={() => {
+                          if ((form.origin || '').trim().length >= 2) {
+                            setShowOriginSuggestions(true)
+                          }
+                        }}
+                        onBlur={() => setTimeout(() => setShowOriginSuggestions(false), 200)}
                         placeholder="Starting city (e.g. New York, London, Mumbai)"
                         className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 py-3 text-sm text-slate-800 outline-none transition-colors focus:border-violet-600 focus:bg-white focus:ring-3 focus:ring-violet-500/10"
                       />
+                      {loadingOriginSuggestions && (
+                        <Loader2 size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 animate-spin" />
+                      )}
                     </div>
+
+                    {/* Origin Suggestions Dropdown - only after start typing */}
+                    {showOriginSuggestions && (form.origin || '').trim().length >= 2 && originSuggestions.length > 0 && (
+                      <div className="absolute left-0 right-0 top-full mt-1.5 z-30 max-h-56 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl">
+                        {originSuggestions.map((item, idx) => (
+                          <button
+                            key={item.id || idx}
+                            type="button"
+                            onMouseDown={() => {
+                              updateField('origin', item.name || item.city)
+                              setShowOriginSuggestions(false)
+                              setOriginSuggestions([])
+                            }}
+                            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left hover:bg-slate-50 transition-colors"
+                          >
+                            <Navigation size={14} className="text-blue-500 shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-semibold text-slate-800 truncate">
+                                {item.name || item.city}
+                              </p>
+                              <p className="text-[10px] text-slate-400 truncate">
+                                {item.formatted || item.country}
+                              </p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
-                  <div>
+                  {/* Destination Input with Live Autocomplete */}
+                  <div className="relative">
                     <label className="block text-xs font-bold text-slate-700 mb-1.5">
                       What is your destination <span className="text-violet-600">*</span>
                     </label>
@@ -476,11 +691,75 @@ export default function CreateTrip() {
                       <input
                         type="text"
                         value={form.destination}
-                        onChange={(e) => updateField('destination', e.target.value)}
-                        placeholder="Destination (e.g. Kyoto, Paris, Swiss Alps, Bali)"
+                        onChange={(e) => {
+                          const val = e.target.value
+                          updateField('destination', val)
+                          if (val.trim().length >= 2) {
+                            setShowDestSuggestions(true)
+                          } else {
+                            setShowDestSuggestions(false)
+                            setDestSuggestions([])
+                          }
+                        }}
+                        onFocus={() => {
+                          if ((form.destination || '').trim().length >= 2) {
+                            setShowDestSuggestions(true)
+                          }
+                        }}
+                        onBlur={() => setTimeout(() => setShowDestSuggestions(false), 200)}
+                        placeholder="Search any city, town, island, or region worldwide..."
                         className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 py-3 text-sm text-slate-800 outline-none transition-colors focus:border-violet-600 focus:bg-white focus:ring-3 focus:ring-violet-500/10"
                       />
+                      {loadingDestSuggestions && (
+                        <Loader2 size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-violet-500 animate-spin" />
+                      )}
                     </div>
+
+                    {/* Destination Suggestions Dropdown - only after start typing */}
+                    {showDestSuggestions && (form.destination || '').trim().length >= 2 && destSuggestions.length > 0 && (
+                      <div className="absolute left-0 right-0 top-full mt-1.5 z-30 max-h-64 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl">
+                        {destSuggestions.map((item, idx) => (
+                          <button
+                            key={item.id || idx}
+                            type="button"
+                            onMouseDown={() => {
+                              updateField('destination', item.name || item.city)
+                              setShowDestSuggestions(false)
+                              setDestSuggestions([])
+                            }}
+                            className="flex w-full items-center gap-3 rounded-xl p-2 text-left hover:bg-violet-50/60 transition-colors"
+                          >
+                            {item.image_url ? (
+                              <img
+                                src={resolveImageUrl(item.image_url)}
+                                alt={item.name}
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  e.currentTarget.onerror = null
+                                  e.currentTarget.src = resolveImageUrl('/images/hero.jpg')
+                                }}
+                                className="h-9 w-9 rounded-lg object-cover shrink-0"
+                              />
+                            ) : (
+                              <div className="grid h-9 w-9 place-items-center rounded-lg bg-violet-100 text-violet-600 shrink-0">
+                                <MapPin size={16} />
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-bold text-slate-800 truncate">
+                                {item.name || item.city}
+                              </p>
+                              <p className="text-[10px] text-slate-500 truncate">
+                                {item.formatted || item.country}
+                              </p>
+                            </div>
+                            <span className="text-[9px] font-semibold text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full shrink-0">
+                              Select
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -493,36 +772,138 @@ export default function CreateTrip() {
                       B. Travel Preferences
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Select all experiences you want prioritized in your itinerary.
+                      {form.destination.trim()
+                        ? `Available experiences tailored to ${form.destination.trim()}:`
+                        : 'Select all experiences you want prioritized in your itinerary.'}
                     </p>
                   </div>
-                  <span className="text-xs font-semibold text-violet-700 bg-violet-50 px-2.5 py-1 rounded-full self-start">
-                    {form.selectedInterests.length} selected
-                  </span>
+                  {availablePreferences.length > 0 && (
+                    <span className="text-xs font-semibold text-violet-700 bg-violet-50 px-2.5 py-1 rounded-full self-start border border-violet-100">
+                      {form.selectedInterests.length} selected
+                    </span>
+                  )}
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-                  {ALL_INTERESTS.map((item) => {
-                    const selected = form.selectedInterests.includes(item.id)
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => toggleInterest(item.id)}
-                        className={`flex flex-col items-center justify-center p-3.5 rounded-2xl border text-center transition-all ${
-                          selected
-                            ? 'border-violet-600 bg-violet-50/80 text-violet-900 shadow-xs ring-2 ring-violet-500/20'
-                            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span className="text-2xl mb-1.5">{item.emoji}</span>
-                        <span className="text-xs font-semibold tracking-tight">
-                          {item.label}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
+                {/* State 1: No destination entered yet */}
+                {!form.destination.trim() && (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 p-8 text-center">
+                    <Compass size={32} className="mx-auto text-violet-400 mb-2.5 opacity-80" />
+                    <p className="text-sm font-semibold text-slate-700">
+                      Select a destination to discover available experiences.
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+                      Different destinations offer different activities — enter your destination above to load real local attractions and experiences.
+                    </p>
+                  </div>
+                )}
+
+                {/* State 2: Loading preferences indicator */}
+                {form.destination.trim() && loadingPreferences && (
+                  <div className="rounded-2xl border border-violet-100 bg-violet-50/40 p-8 text-center">
+                    <Loader2 size={28} className="mx-auto text-violet-600 animate-spin mb-2.5" />
+                    <p className="text-xs font-bold text-violet-900">
+                      Discovering available activities in {form.destination.trim()}...
+                    </p>
+                    <p className="text-[11px] text-violet-600/80 mt-1">
+                      Analyzing local attractions, sights, and verified experiences.
+                    </p>
+                  </div>
+                )}
+
+                {/* State 3: Destination not found / error */}
+                {form.destination.trim() && !loadingPreferences && preferencesError && (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-6 text-center">
+                    <AlertCircle size={28} className="mx-auto text-amber-600 mb-2" />
+                    <p className="text-xs font-bold text-amber-900">{preferencesError}</p>
+                    <p className="text-[11px] text-amber-700 mt-1">
+                      You can still continue planning your journey to {form.destination.trim()} and add your custom interests below.
+                    </p>
+                  </div>
+                )}
+
+                {/* State 4: Dynamic Preference Cards Display */}
+                {form.destination.trim() && !loadingPreferences && (
+                  <div className="space-y-4">
+                    {availablePreferences.length > 0 && (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                        {availablePreferences.map((item) => {
+                          const selected = form.selectedInterests.includes(item.id)
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => toggleInterest(item.id)}
+                              className={`flex flex-col items-center justify-center p-3.5 rounded-2xl border text-center transition-all ${
+                                selected
+                                  ? 'border-violet-600 bg-violet-50/80 text-violet-900 shadow-xs ring-2 ring-violet-500/20'
+                                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                              }`}
+                            >
+                              <span className="text-2xl mb-1.5">{item.emoji}</span>
+                              <span className="text-xs font-semibold tracking-tight">
+                                {item.label}
+                              </span>
+                              {item.count > 0 && (
+                                <span className="text-[10px] text-slate-400 mt-0.5">
+                                  {item.count} activit{item.count > 1 ? 'ies' : 'y'}
+                                </span>
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* Custom Interest Adder */}
+                    <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-3">
+                      {!showAddCustom ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowAddCustom(true)}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-violet-600 hover:text-violet-700 bg-violet-50 hover:bg-violet-100 px-3 py-1.5 rounded-xl transition-colors border border-violet-200"
+                        >
+                          <Plus size={14} />
+                          Add Custom Interest
+                        </button>
+                      ) : (
+                        <form
+                          onSubmit={handleAddCustomInterest}
+                          className="flex items-center gap-2"
+                        >
+                          <input
+                            type="text"
+                            value={customInterest}
+                            onChange={(e) => setCustomInterest(e.target.value)}
+                            placeholder="e.g. Scuba diving, Pottery, Star gazing"
+                            autoFocus
+                            className="rounded-xl border border-violet-300 bg-white px-3 py-1.5 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-violet-500/20 w-64"
+                          />
+                          <button
+                            type="submit"
+                            className="rounded-xl bg-violet-600 text-white px-3 py-1.5 text-xs font-semibold hover:bg-violet-700 transition-colors"
+                          >
+                            Add
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowAddCustom(false)
+                              setCustomInterest('')
+                            }}
+                            className="grid h-7 w-7 place-items-center text-slate-400 hover:text-slate-600"
+                          >
+                            <X size={14} />
+                          </button>
+                        </form>
+                      )}
+                      <span className="text-[11px] text-slate-400">
+                        {form.destination.trim()
+                          ? `Experiences dynamically tailored to verified sights in ${form.destination.trim()}.`
+                          : ''}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Section C: Additional Preferences & Special Requests */}
@@ -792,50 +1173,59 @@ export default function CreateTrip() {
                   )}
                 </div>
 
-                {/* Style & Pace options */}
-                <div className="mt-6 grid gap-5 sm:grid-cols-2 border-t border-slate-100 pt-5">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-2">
+                {/* Unified Accommodation & Travel Style (Strictly Single Select) */}
+                <div className="mt-6 border-t border-slate-100 pt-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-bold text-slate-700">
                       Accommodation & Travel Style
                     </label>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {travelStyles.map((st) => (
-                        <button
-                          key={st}
-                          type="button"
-                          onClick={() => updateField('travelStyle', st)}
-                          className={`rounded-xl py-2 text-xs font-semibold border transition-all ${
-                            form.travelStyle === st
-                              ? 'border-violet-600 bg-violet-50 text-violet-800'
-                              : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                          }`}
-                        >
-                          {st}
-                        </button>
-                      ))}
-                    </div>
+                    <span className="text-[11px] text-violet-700 font-semibold bg-violet-50 px-2.5 py-0.5 rounded-full border border-violet-100">
+                      Select only 1 option
+                    </span>
                   </div>
+                  <p className="text-xs text-slate-500 mb-3">
+                    Choose your travel preference (only one option can be selected).
+                  </p>
+                  <div
+                    className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2"
+                    role="radiogroup"
+                    aria-label="Accommodation & Travel Style"
+                  >
+                    {[
+                      { id: 'Backpacker', label: 'Backpacker', style: 'Backpacker', pace: 'Fast-paced' },
+                      { id: 'Budget', label: 'Budget', style: 'Budget', pace: 'Moderate' },
+                      { id: 'Comfort', label: 'Comfort', style: 'Comfort', pace: 'Moderate' },
+                      { id: 'Luxury', label: 'Luxury', style: 'Luxury', pace: 'Relaxed' },
+                      { id: 'Fast-paced', label: 'Fast-paced', style: 'Backpacker', pace: 'Fast-paced' },
+                      { id: 'Relaxed', label: 'Relaxed', style: 'Comfort', pace: 'Relaxed' },
+                    ].map((opt) => {
+                      const isSelected =
+                        (form.selectedTravelOption || form.travelStyle) === opt.id
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-2">
-                      Trip Pacing
-                    </label>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {tripPaces.map((pc) => (
+                      return (
                         <button
-                          key={pc}
+                          key={opt.id}
                           type="button"
-                          onClick={() => updateField('tripPace', pc)}
-                          className={`rounded-xl py-2 text-xs font-semibold border transition-all ${
-                            form.tripPace === pc
-                              ? 'border-violet-600 bg-violet-50 text-violet-800'
-                              : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                          role="radio"
+                          aria-checked={isSelected}
+                          onClick={() => {
+                            setForm((prev) => ({
+                              ...prev,
+                              selectedTravelOption: opt.id,
+                              travelStyle: opt.style,
+                              tripPace: opt.pace,
+                            }))
+                          }}
+                          className={`rounded-xl py-2.5 px-3 text-xs font-semibold border transition-all text-center ${
+                            isSelected
+                              ? 'border-violet-600 bg-violet-50 text-violet-800 shadow-xs ring-2 ring-violet-500/20'
+                              : 'border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
                           }`}
                         >
-                          {pc}
+                          {opt.label}
                         </button>
-                      ))}
-                    </div>
+                      )
+                    })}
                   </div>
                 </div>
               </div>
@@ -1056,6 +1446,11 @@ export default function CreateTrip() {
                             <img
                               src={resolveImageUrl(dest.image_url)}
                               alt={dest.name}
+                              referrerPolicy="no-referrer"
+                              onError={(e) => {
+                                e.currentTarget.onerror = null
+                                e.currentTarget.src = resolveImageUrl('/images/hero.jpg')
+                              }}
                               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-106"
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-black/20" />

@@ -90,6 +90,12 @@ export const api = {
 
   optimize: (body, token) => request('/trips/optimize', { method: 'POST', body, token }),
   destinations: () => request('/destinations'),
+  autocompleteDestinations: (q) =>
+    request(`/destinations/autocomplete?q=${encodeURIComponent(q)}`),
+  searchDestinations: (q) =>
+    request(`/destinations/search?q=${encodeURIComponent(q)}`),
+  getDestinationPreferences: (destination) =>
+    request(`/destinations/preferences?destination=${encodeURIComponent(destination)}`),
   recommendDestinations: (body) => request('/destinations/recommend', { method: 'POST', body }),
   destinationImage: (q) =>
     request(`/destinations/image?q=${encodeURIComponent(q)}`),
@@ -100,4 +106,29 @@ export const api = {
     request(
       `/trains/search?from_station=${encodeURIComponent(from_station)}&to_station=${encodeURIComponent(to_station)}&date=${encodeURIComponent(date)}&currency=${encodeURIComponent(currency || 'INR')}`
     ),
+
+  // TripPulse AI Endpoints
+  getTripPulse: (tripId, token) => request(`/trips/${tripId}/pulse`, { token }),
+  simulateDisruption: (tripId, body, token) =>
+    request(`/trips/${tripId}/pulse/simulate`, { method: 'POST', body, token }),
+  triggerReoptimization: (tripId, token) =>
+    request(`/trips/${tripId}/pulse/reoptimize`, { method: 'POST', token }),
+  applyReoptimization: (tripId, reoptId, body, token) =>
+    request(`/trips/${tripId}/pulse/reoptimize/${reoptId}/apply`, { method: 'POST', body, token }),
+  rollbackReoptimization: (tripId, reoptId, token) =>
+    request(`/trips/${tripId}/pulse/reoptimize/${reoptId}/rollback`, { method: 'POST', token }),
+  dismissAlert: (tripId, alertId, token) =>
+    request(`/trips/${tripId}/pulse/alerts/${alertId}/dismiss`, { method: 'POST', token }),
+
+  // Smart Alternatives, Explainable Itinerary & What-If Simulation
+  findAlternatives: (tripId, body, token) =>
+    request(`/trips/${tripId}/alternatives`, { method: 'POST', body, token }),
+  replaceAttraction: (tripId, body, token) =>
+    request(`/trips/${tripId}/replace-attraction`, { method: 'POST', body, token }),
+  getItineraryExplanations: (tripId, token) =>
+    request(`/trips/${tripId}/itinerary-explanations`, { token }),
+  simulateTripChanges: (tripId, body, token) =>
+    request(`/trips/${tripId}/simulate`, { method: 'POST', body, token }),
+  applyTripSimulation: (tripId, body, token) =>
+    request(`/trips/${tripId}/apply-simulation`, { method: 'POST', body, token }),
 }

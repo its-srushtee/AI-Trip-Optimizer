@@ -320,6 +320,11 @@ export default function Trips() {
                       <img
                         src={img}
                         alt={trip.destination}
+                        referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null
+                          e.currentTarget.src = resolveImageUrl('/images/hero.jpg')
+                        }}
                         className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-106"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-transparent to-black/20" />
@@ -443,6 +448,11 @@ export default function Trips() {
               <img
                 src={imageFor(selectedTrip.destination)}
                 alt={selectedTrip.destination}
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  e.currentTarget.onerror = null
+                  e.currentTarget.src = resolveImageUrl('/images/hero.jpg')
+                }}
                 className="h-full w-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-black/30 to-black/30" />

@@ -15,7 +15,15 @@ export default function TripCard({ trip, image, credit, onRemove }) {
   return (
     <article className="card card-hover group overflow-hidden">
       <div className="photo-card scrim relative h-40 rounded-none">
-        <img src={image} alt="" />
+        <img
+          src={image}
+          alt={trip.destination || ''}
+          referrerPolicy="no-referrer"
+          onError={(e) => {
+            e.currentTarget.onerror = null
+            e.currentTarget.src = '/images/hero.jpg'
+          }}
+        />
         {/* Creative Commons attribution (TASL: Title, Author, Source, Licence).
             Note: no (c) symbol - these are openly licensed, not all-rights-
             reserved, and the licence name must be visible, not hover-only. */}

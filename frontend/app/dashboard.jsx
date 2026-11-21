@@ -15,6 +15,8 @@ import {
   Heart,
   Edit3,
   X,
+  Sliders,
+  Check,
 } from 'lucide-react'
 
 import Sidebar from '../components/common/Sidebar.jsx'
@@ -23,7 +25,16 @@ import { getUser, clearUser, saveUser } from '../lib/userStore.js'
 import { api, getToken, clearToken, resolveImageUrl } from '../services/api.js'
 import { useTripImages } from '../hooks/useTripImages.js'
 import { useSidebar } from '../hooks/useSidebar.js'
-import { currencyOptions, getCurrencySymbol, formatCurrency, getTodayDateStr, getNextDayDateStr } from '../lib/constants.js'
+import {
+  currencyOptions,
+  getCurrencySymbol,
+  formatCurrency,
+  getTodayDateStr,
+  getNextDayDateStr,
+  interests as ALL_INTERESTS,
+  travelStyles as ALL_TRAVEL_STYLES,
+  tripPaces as ALL_TRIP_PACES,
+} from '../lib/constants.js'
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -47,6 +58,17 @@ export default function Dashboard() {
       return []
     }
   })
+
+  // Travel Preferences Customization Modal states
+  const [showPrefsModal, setShowPrefsModal] = useState(false)
+  const [savingPrefs, setSavingPrefs] = useState(false)
+  const [modalPrefs, setModalPrefs] = useState(() => ({
+    style: user?.preferences?.style || 'Comfort',
+    pace: user?.preferences?.pace || 'Balanced',
+    interests: user?.preferences?.interests || [],
+    food: user?.preferences?.food || 'No preference',
+    accommodation: user?.preferences?.accommodation || 'Hotel',
+  }))
 
   // Edit trip modal state
   const [editingTrip, setEditingTrip] = useState(null)
@@ -115,6 +137,23 @@ export default function Dashboard() {
 
   const prefs = user?.preferences
 
+  const fetchDestinations = async (userPreferences) => {
+    try {
+      const recs = await api.recommendDestinations({
+        interests: userPreferences?.interests || [],
+        style: userPreferences?.style,
+        pace: userPreferences?.pace,
+        currency: userPreferences?.currency || 'INR',
+      })
+      if (Array.isArray(recs) && recs.length > 0) {
+        return recs
+      }
+    } catch (err) {
+      console.warn('Backend recommendation error, falling back to catalogue:', err)
+    }
+    return api.destinations()
+  }
+
   useEffect(() => {
     const token = getToken()
     if (!token) {
@@ -124,16 +163,49 @@ export default function Dashboard() {
     let cancelled = false
     ;(async () => {
       try {
-        const [me, tripList, destList] = await Promise.all([
-          api.me(token),
-          api.listTrips(token),
-          api.destinations(),
-        ])
+        const me = await api.me(token)
         if (cancelled) return
         saveUser(me)
         setUser(me)
-        setTrips(tripList)
-        setDests(destList)
+        setModalPrefs({
+          style: me?.preferences?.style || 'Comfort',
+          pace: me?.preferences?.pace || 'Balanced',
+          interests: me?.preferences?.interests || [],
+          food: me?.preferences?.food || 'No preference',
+          accommodation: me?.preferences?.accommodation || 'Hotel',
+        })
+
+        // Load trips and destination recommendations resiliently so a failure in one
+        // does not take down the other.
+        const [tripResult, destResult] = await Promise.allSettled([
+          api.listTrips(token),
+          fetchDestinations(me.preferences),
+        ])
+
+        if (cancelled) return
+
+        let errorMessages = []
+
+        if (tripResult.status === 'fulfilled') {
+          setTrips(Array.isArray(tripResult.value) ? tripResult.value : [])
+        } else {
+          console.warn('Failed to load trips:', tripResult.reason)
+          errorMessages.push('Trips: ' + (tripResult.reason?.message || 'Server error'))
+        }
+
+        if (destResult.status === 'fulfilled') {
+          setDests(Array.isArray(destResult.value) ? destResult.value : [])
+        } else {
+          console.warn('Failed to load destinations:', destResult.reason)
+          errorMessages.push('Destinations: ' + (destResult.reason?.message || 'Server error'))
+        }
+
+        if (errorMessages.length > 0 && tripResult.status === 'rejected' && destResult.status === 'rejected') {
+          setLoadError(errorMessages.join(' | '))
+        } else if (errorMessages.length > 0) {
+          // Partial failure: show subtle message without breaking the entire view
+          setLoadError(errorMessages.join(' | '))
+        }
       } catch (err) {
         if (cancelled) return
         if (err.status === 401) {
@@ -151,6 +223,25 @@ export default function Dashboard() {
       cancelled = true
     }
   }, [navigate, reload])
+
+  const handleSavePreferencesModal = async (e) => {
+    e.preventDefault()
+    const token = getToken()
+    if (!token) return
+    setSavingPrefs(true)
+    try {
+      const updatedUser = await api.updateMe({ preferences: modalPrefs }, token)
+      saveUser(updatedUser)
+      setUser(updatedUser)
+      const newDests = await fetchDestinations(modalPrefs)
+      setDests(newDests)
+      setShowPrefsModal(false)
+    } catch (err) {
+      console.error('Failed to update preferences:', err)
+    } finally {
+      setSavingPrefs(false)
+    }
+  }
 
   const toggleFavorite = (e, destId) => {
     e.stopPropagation()
@@ -396,6 +487,11 @@ export default function Dashboard() {
                         <img
                           src={img}
                           alt={trip.destination}
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            e.currentTarget.onerror = null
+                            e.currentTarget.src = resolveImageUrl('/images/hero.jpg')
+                          }}
                           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-black/20" />
@@ -505,6 +601,67 @@ export default function Dashboard() {
               </div>
             </div>
 
+            {/* Active Preferences Summary or Call-to-action */}
+            {prefs && (prefs.interests?.length > 0 || prefs.style || prefs.pace) ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-violet-100 bg-violet-50/70 p-3.5 text-xs text-violet-900 mb-6 shadow-2xs">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-bold flex items-center gap-1.5 text-violet-700">
+                    <Sparkles size={14} className="text-violet-600" /> Matched to your taste:
+                  </span>
+                  {(prefs.interests || []).slice(0, 4).map((i) => (
+                    <span
+                      key={i}
+                      className="rounded-full bg-white border border-violet-200 px-2.5 py-0.5 font-medium text-violet-700 shadow-2xs"
+                    >
+                      {i.charAt(0).toUpperCase() + i.slice(1)}
+                    </span>
+                  ))}
+                  {prefs.style && (
+                    <span className="rounded-full bg-white border border-violet-200 px-2.5 py-0.5 font-medium text-violet-700 shadow-2xs">
+                      {prefs.style} Style
+                    </span>
+                  )}
+                  {prefs.pace && (
+                    <span className="rounded-full bg-white border border-violet-200 px-2.5 py-0.5 font-medium text-violet-700 shadow-2xs">
+                      {prefs.pace} Pace
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPrefsModal(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-white border border-violet-300 px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100 transition-colors shadow-2xs cursor-pointer"
+                >
+                  <Sliders size={12} />
+                  <span>Customize Preferences</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-dashed border-violet-300 bg-violet-50/50 p-4 mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-600 text-white shadow-xs">
+                    <Compass size={20} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">
+                      Personalize your destination recommendations
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Select your favorite travel styles and interests to get tailor-made picks.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPrefsModal(true)}
+                  className="shrink-0 inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white hover:bg-violet-700 shadow-xs transition-colors cursor-pointer"
+                >
+                  <Sparkles size={13} />
+                  <span>Set Preferences</span>
+                </button>
+              </div>
+            )}
+
             {loading ? (
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
                 {[0, 1, 2, 3].map((i) => (
@@ -548,9 +705,22 @@ export default function Dashboard() {
                         <img
                           src={resolveImageUrl(d.image_url)}
                           alt={d.name}
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            e.currentTarget.onerror = null
+                            e.currentTarget.src = resolveImageUrl('/images/hero.jpg')
+                          }}
                           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-108"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 via-transparent to-black/20" />
+
+                        {/* Top-left match score badge */}
+                        {(d.match || d.match_score) && (
+                          <span className="absolute top-3 left-3 flex items-center gap-1 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-md backdrop-blur-md">
+                            <Sparkles size={11} />
+                            {d.match || d.match_score}% Match
+                          </span>
+                        )}
 
                         {/* Favorite button */}
                         <button
@@ -583,6 +753,14 @@ export default function Dashboard() {
                               {d.country}
                             </span>
                           </div>
+
+                          {/* Recommendation Reason */}
+                          {d.match_reasons && d.match_reasons[0] && (
+                            <p className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-violet-700">
+                              <Sparkles size={11} className="shrink-0 text-violet-500" />
+                              <span className="truncate">{d.match_reasons[0]}</span>
+                            </p>
+                          )}
 
                           <p className="mt-1 text-xs text-slate-500 line-clamp-2 leading-relaxed">
                             {d.blurb || 'Discover historic sights, local flavors, and memorable experiences.'}
@@ -773,6 +951,146 @@ export default function Dashboard() {
                     className="rounded-xl bg-violet-600 px-4 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-violet-700 disabled:opacity-50"
                   >
                     {savingEdit ? 'Saving…' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+        {/* Travel Preferences Customization Modal */}
+        {showPrefsModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs animate-fade-in">
+            <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="grid h-8 w-8 place-items-center rounded-xl bg-violet-100 text-violet-600">
+                    <Sparkles size={16} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">
+                      Customize Travel Preferences
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Personalize your destination recommendations in real-time
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPrefsModal(false)}
+                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSavePreferencesModal} className="space-y-4">
+                {/* Travel Style */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+                    Travel Style
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {ALL_TRAVEL_STYLES.map((s) => {
+                      const active = modalPrefs.style === s
+                      return (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setModalPrefs((p) => ({ ...p, style: s }))}
+                          className={`rounded-xl border px-3 py-2 text-xs font-semibold transition-all ${
+                            active
+                              ? 'border-violet-600 bg-violet-50 text-violet-700 shadow-xs'
+                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                          }`}
+                        >
+                          {s}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Trip Pace */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+                    Trip Pace
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {['Relaxed', 'Balanced', 'Fast-paced'].map((p) => {
+                      const active = modalPrefs.pace === p
+                      return (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setModalPrefs((prev) => ({ ...prev, pace: p }))}
+                          className={`rounded-xl border px-3 py-2 text-xs font-semibold transition-all ${
+                            active
+                              ? 'border-violet-600 bg-violet-50 text-violet-700 shadow-xs'
+                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Interests Chips */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Interests
+                    </label>
+                    <span className="text-[11px] font-medium text-violet-600">
+                      {(modalPrefs.interests || []).length} selected
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 max-h-44 overflow-y-auto pr-1">
+                    {ALL_INTERESTS.map((i) => {
+                      const selected = (modalPrefs.interests || []).includes(i.id)
+                      return (
+                        <button
+                          key={i.id}
+                          type="button"
+                          onClick={() => {
+                            setModalPrefs((prev) => {
+                              const curr = prev.interests || []
+                              const next = curr.includes(i.id)
+                                ? curr.filter((x) => x !== i.id)
+                                : [...curr, i.id]
+                              return { ...prev, interests: next }
+                            })
+                          }}
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
+                            selected
+                              ? 'border-violet-600 bg-violet-600 text-white shadow-xs'
+                              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span>{i.emoji}</span>
+                          <span>{i.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowPrefsModal(false)}
+                    className="rounded-xl border border-slate-200 px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingPrefs}
+                    className="rounded-xl bg-violet-600 px-4 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-violet-700 disabled:opacity-50"
+                  >
+                    {savingPrefs ? 'Updating…' : 'Save & Refresh Recommendations'}
                   </button>
                 </div>
               </form>

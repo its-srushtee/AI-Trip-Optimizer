@@ -22,11 +22,27 @@ class TransportAgent(BaseAgent):
         currency = (req.get("currency") or req.get("preferences", {}).get("currency") or "USD").upper()
         curr_sym = CURRENCY_SYMBOLS.get(currency, "$")
 
+        # Resolve starting city if not specified so flight search and display never fail
+        origin_inferred = False
+        if not origin or not str(origin).strip():
+            user_orig = req.get("preferences", {}).get("origin")
+            if user_orig:
+                origin = user_orig
+            elif currency == "INR":
+                origin = "Bengaluru"
+                origin_inferred = True
+            else:
+                origin = "New York"
+                origin_inferred = True
+
         # Read budget allocation targets
         alloc = state.get("budget_allocation") or {}
         transport_target = alloc.get("transport_target")
         per_person_target = alloc.get("per_person_transport_target")
         is_domestic = alloc.get("is_domestic", False)
+
+        from app.services.transit_service import get_nearby_transit
+        nearby_transit = get_nearby_transit(city)
 
         # -------------------------------------------------------------
         # 1. LIVE / SCHEDULED TRAINS VIA RAILCORE (DOMESTIC INDIA ONLY)
@@ -66,43 +82,22 @@ class TransportAgent(BaseAgent):
 
         # Fallback flight guidance if SerpApi returned no live results
         if not flights:
-            c_lower = city.lower()
-            dep_code = resolve_airport_code(origin) if origin else "DEP"
-            dep_name = origin or "Nearest Major Hub"
-
-            if "tokyo" in c_lower or "japan" in c_lower:
-                arr_code, arr_name = "HND", "Tokyo Haneda Airport"
-                airline_1, usd_1, airline_2, usd_2 = "All Nippon Airways (ANA)", 680, "Japan Airlines (JAL)", 720
-            elif "paris" in c_lower or "france" in c_lower:
-                arr_code, arr_name = "CDG", "Paris Charles de Gaulle"
-                airline_1, usd_1, airline_2, usd_2 = "Air France", 590, "Lufthansa", 540
-            elif "alps" in c_lower or "swiss" in c_lower or "interlaken" in c_lower:
-                arr_code, arr_name = "ZRH", "Zurich International Airport"
-                airline_1, usd_1, airline_2, usd_2 = "Swiss International Air Lines", 620, "Emirates", 660
-            elif "maldives" in c_lower:
-                arr_code, arr_name = "MLE", "Velana International Airport (Malé)"
-                airline_1, usd_1, airline_2, usd_2 = "Qatar Airways", 480, "Emirates", 510
-            elif "manali" in c_lower:
-                arr_code, arr_name = "KUU", "Kullu-Manali Bhuntar Airport"
-                airline_1, usd_1, airline_2, usd_2 = "Alliance Air", 75, "IndiGo", 68
-            elif "jaipur" in c_lower:
-                arr_code, arr_name = "JAI", "Jaipur International Airport"
-                airline_1, usd_1, airline_2, usd_2 = "IndiGo", 55, "Air India", 62
-            elif "goa" in c_lower:
-                arr_code, arr_name = "GOI", "Goa Dabolim / Mopa International Airport"
-                airline_1, usd_1, airline_2, usd_2 = "IndiGo", 65, "Air India Express", 58
-            elif "bali" in c_lower or "indonesia" in c_lower:
-                arr_code, arr_name = "DPS", "Ngurah Rai International Airport (Denpasar)"
-                airline_1, usd_1, airline_2, usd_2 = "Singapore Airlines", 580, "Garuda Indonesia", 520
+            default_dep_code = "BLR" if currency == "INR" else "JFK"
+            dep_code = resolve_airport_code(origin) or default_dep_code
+            dep_name = origin or ("Bengaluru (BLR)" if currency == "INR" else "New York (JFK)")
+            if nearby_transit and not nearby_transit.get("has_direct_airport"):
+                arr_code = nearby_transit["nearby_airport"]["code"]
+                arr_name = nearby_transit["nearby_airport"]["name"]
             else:
                 arr_code = resolve_airport_code(city) or "ARR"
                 arr_name = f"{city} Airport"
-                if is_domestic:
-                    airline_1, usd_1 = f"Major Domestic Carrier to {city}", 50
-                    airline_2, usd_2 = f"Budget Express to {city}", 42
-                else:
-                    airline_1, usd_1 = f"Major Carrier to {city}", 450
-                    airline_2, usd_2 = f"Regional Carrier to {city}", 380
+
+            if is_domestic:
+                airline_1, usd_1 = f"Major Domestic Carrier to {city}", 65
+                airline_2, usd_2 = f"Budget Express to {city}", 52
+            else:
+                airline_1, usd_1 = f"Major Carrier to {city}", 520
+                airline_2, usd_2 = f"Regional Carrier to {city}", 440
 
             p_1 = currency_client.convert(usd_1, "USD", currency)["converted_amount"]
             p_2 = currency_client.convert(usd_2, "USD", currency)["converted_amount"]
@@ -161,34 +156,64 @@ class TransportAgent(BaseAgent):
             else "Fastest air connection for your itinerary."
         )
 
-        if is_domestic and lowest_train_per_person:
-            # If domestic train is significantly cheaper and trip budget is constrained, recommend train
-            if (
-                lowest_flight_per_person is None
-                or (lowest_flight_per_person * travelers > (transport_target or 999999))
-                or (lowest_train_per_person < (lowest_flight_per_person or 999999) * 0.6)
-            ):
+        total_flight_cost = (lowest_flight_per_person or 0) * travelers
+        flight_is_infeasible = False
+        target_cap = transport_target or 999999
+
+        if lowest_flight_per_person and total_flight_cost > target_cap:
+            flight_is_infeasible = True
+
+        if is_domestic:
+            if flight_is_infeasible:
+                if lowest_train_per_person:
+                    recommended_mode = "Train"
+                    recommendation_reason = (
+                        f"Airfare ({curr_sym}{total_flight_cost:,}) exceeds transport budget target ({curr_sym}{target_cap:,}). "
+                        f"Recommended economical train travel (~{curr_sym}{lowest_train_per_person * travelers:,} total) to maintain budget feasibility."
+                    )
+                else:
+                    recommended_mode = "Train / Regional Transit"
+                    recommendation_reason = (
+                        f"Direct flight costs ({curr_sym}{total_flight_cost:,}) exceed allocated transport budget ({curr_sym}{target_cap:,}). "
+                        f"Recommended economical rail/overland transit to preserve your vacation budget."
+                    )
+            elif lowest_train_per_person and (lowest_train_per_person < (lowest_flight_per_person or 999999) * 0.6):
                 recommended_mode = "Train"
                 recommendation_reason = (
                     f"Recommended for budget efficiency: train travel costs ~{curr_sym}{lowest_train_per_person:,} "
                     f"per traveler compared to ~{curr_sym}{lowest_flight_per_person:,} by air."
-                    if lowest_flight_per_person else "Economical and scenic rail link for your destination."
                 )
 
-        origin_note = f"Origin: {origin}." if origin else "Origin: Flexible departures."
+        if origin_inferred:
+            origin_note = f"Departure city estimated from {origin}. You can specify your starting city anytime in trip preferences."
+        elif origin:
+            origin_note = f"Origin: {origin}."
+        else:
+            origin_note = "Origin: Flexible departures."
+        guidelines = [
+            f"{origin_note} Travel Window: {start} to {end} for {travelers} traveler(s).",
+            f"Recommended mode: {recommended_mode}. {recommendation_reason}",
+        ]
+        if nearby_transit and not nearby_transit.get("has_direct_airport"):
+            ap = nearby_transit.get("nearby_airport", {})
+            rw = nearby_transit.get("nearby_railway", {})
+            guidelines.append(
+                f"Transit Gateway: {city} has no direct commercial airport. Flights land at nearest airport {ap.get('name', 'Nearby Hub')} ({ap.get('code', '')}, {ap.get('distance', '')}). Nearest railway station: {rw.get('name', 'Nearby Station')} ({rw.get('distance', '')})."
+            )
+        guidelines.extend([
+            "Advance booking recommended for peak season travel.",
+            "Local taxis, app cabs, and station kiosks available at the arrival terminal.",
+        ])
+
         state["transport"] = {
             "flights": flights,
             "trains": trains,
             "recommended_mode": recommended_mode,
             "recommendation_reason": recommendation_reason,
+            "nearby_transit": nearby_transit,
             "currency": currency,
             "currency_symbol": curr_sym,
-            "guidelines": [
-                f"{origin_note} Travel Window: {start} to {end} for {travelers} traveler(s).",
-                f"Recommended mode: {recommended_mode}. {recommendation_reason}",
-                "Advance booking recommended for peak season travel.",
-                "Local taxis, app cabs, and station kiosks available at the arrival terminal.",
-            ],
+            "guidelines": guidelines,
             "configured": serpapi_client.is_configured(),
             "source": "serpapi_and_railcore" if serpapi_client.is_configured() or trains else "estimated_route",
         }

@@ -1,6 +1,8 @@
 """SerpApi client for Google Flights and Google Hotels."""
 import datetime
+import difflib
 import logging
+import re
 from typing import Any
 import httpx
 
@@ -9,7 +11,7 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Common airport code mappings
+# Common airport code mappings (cities, common phonetic variations, and country gateways)
 AIRPORT_CODES = {
     "delhi": "DEL",
     "new delhi": "DEL",
@@ -19,7 +21,9 @@ AIRPORT_CODES = {
     "dabolim": "GOI",
     "mopa": "GOX",
     "bangalore": "BLR",
+    "banglore": "BLR",
     "bengaluru": "BLR",
+    "bengalore": "BLR",
     "hyderabad": "HYD",
     "chennai": "MAA",
     "madras": "MAA",
@@ -93,9 +97,55 @@ AIRPORT_CODES = {
     "kathmandu": "KTM",
     "seoul": "ICN",
     "taipei": "TPE",
+    # Vietnam and Southeast Asia Gateways
+    "vietnam": "HAN",
+    "vitnam": "HAN",
+    "vietnem": "HAN",
+    "viet nam": "HAN",
     "hanoi": "HAN",
     "ho chi minh": "SGN",
+    "ho chi minh city": "SGN",
+    "saigon": "SGN",
     "da nang": "DAD",
+    "danang": "DAD",
+    "thailand": "BKK",
+    "indonesia": "DPS",
+    "jakarta": "CGK",
+    "malaysia": "KUL",
+    "philippines": "MNL",
+    "manila": "MNL",
+    "japan": "HND",
+    "south korea": "ICN",
+    "korea": "ICN",
+    "taiwan": "TPE",
+    "united arab emirates": "DXB",
+    "uae": "DXB",
+    "united kingdom": "LHR",
+    "uk": "LHR",
+    "england": "LHR",
+    "france": "CDG",
+    "germany": "FRA",
+    "italy": "FCO",
+    "spain": "BCN",
+    "switzerland": "ZRH",
+    "netherlands": "AMS",
+    "australia": "SYD",
+    "new zealand": "AKL",
+    "canada": "YYZ",
+    "usa": "JFK",
+    "united states": "JFK",
+    "america": "JFK",
+    "south africa": "CPT",
+    "egypt": "CAI",
+    "turkey": "IST",
+    "turkiye": "IST",
+    "greece": "ATH",
+    "portugal": "LIS",
+    "brazil": "GIG",
+    "mexico": "MEX",
+    "peru": "LIM",
+    "argentina": "EZE",
+    "india": "DEL",
     "marrakech": "RAK",
     "casablanca": "CMN",
     "cancun": "CUN",
@@ -104,19 +154,95 @@ AIRPORT_CODES = {
     "rio de janeiro": "GIG",
     "lima": "LIM",
     "cape town": "CPT",
+    "palawan": "PPS",
+    "puerto princesa": "PPS",
+    "el nido": "ENI",
+    "kerala": "COK",
+    "hampi": "VDY",
+    "vidyanagar": "VDY",
+    "hubli": "HBX",
+    "hubballi": "HBX",
+    "udaipur": "UDR",
+    "jodhpur": "JDH",
+    "jaisalmer": "JSA",
+    "agra": "AGR",
+    "dehradun": "DED",
+    "rishikesh": "DED",
+    "haridwar": "DED",
+    "mysore": "MYQ",
+    "mysuru": "MYQ",
+    "madurai": "IXM",
+    "coimbatore": "CJB",
+    "mangalore": "IXE",
+    "mangaluru": "IXE",
+    "bagdogra": "IXB",
+    "darjeeling": "IXB",
+    "gangtok": "IXB",
+    "port blair": "IXZ",
+    "andaman": "IXZ",
+    "nha trang": "CXR",
+    "cam ranh": "CXR",
+    "phu quoc": "PQC",
+    "krabi": "KBV",
+    "koh samui": "USM",
+    "siem reap": "SAI",
+    "phnom penh": "PNH",
+    "boracay": "MPH",
+    "cebu": "CEB",
+    "johannesburg": "JNB",
+    "durban": "DUR",
+    "nairobi": "NBO",
+    "vancouver": "YVR",
+    "montreal": "YUL",
+    "calgary": "YYC",
 }
 
 
 def resolve_airport_code(text: str | None) -> str | None:
+    """Accurately resolves an airport code using exact, substring, and fuzzy matching."""
     if not text:
         return None
     cleaned = text.strip()
     if len(cleaned) == 3 and cleaned.isalpha():
         return cleaned.upper()
-    lower = cleaned.lower()
+    lower = re.sub(r"[^a-z0-9 ]+", " ", cleaned.lower()).strip()
+    if not lower:
+        return None
+
+    # 1. Exact match
+    if lower in AIRPORT_CODES:
+        return AIRPORT_CODES[lower]
+
+    # 2. Word-boundary or substring search
+    padded = f" {lower} "
     for city, code in AIRPORT_CODES.items():
-        if city in lower or lower in city:
+        if f" {city} " in padded:
             return code
+    for city, code in AIRPORT_CODES.items():
+        if city in lower or (len(city) > 4 and lower in city):
+            return code
+
+    # 3. Fuzzy matching for phonetic typos (e.g. "banglore", "vitnam", "vietnem")
+    close = difflib.get_close_matches(lower, AIRPORT_CODES.keys(), n=1, cutoff=0.7)
+    if close:
+        return AIRPORT_CODES[close[0]]
+
+    # 4. Word-by-word fuzzy matching
+    for w in lower.split():
+        if len(w) >= 4:
+            close_w = difflib.get_close_matches(w, AIRPORT_CODES.keys(), n=1, cutoff=0.75)
+            if close_w:
+                return AIRPORT_CODES[close_w[0]]
+
+    # 5. Check nearby transit registry for destinations without direct commercial airports
+    try:
+        from app.services.transit_service import get_nearby_transit
+        nearby = get_nearby_transit(lower)
+        if nearby and nearby.get("nearby_airport"):
+            return nearby["nearby_airport"]["code"]
+    except Exception:
+        pass
+
     return None
 
 
@@ -150,9 +276,21 @@ class SerpApiClient:
             logger.info("Check-in date %s is in the past; skipping live hotel search.", check_in_date)
             return []
 
-        clean_q = destination.strip()
-        if not any(clean_q.lower().startswith(prefix) for prefix in ["hotels in", "hostels in", "luxury resorts in", "homestays in", "resorts in"]):
-            clean_q = f"hotels in {clean_q}"
+        raw_dest = destination.strip()
+        lower_raw = raw_dest.lower()
+        for prefix in ["hotels and boutique inns in ", "luxury resorts in ", "homestays in ", "hostels in ", "resorts in ", "hotels in "]:
+            if lower_raw.startswith(prefix):
+                lower_raw = lower_raw[len(prefix):].strip()
+                break
+
+        if lower_raw in {"vietnem", "vitnam", "viet nam"}:
+            city_target = "Vietnam"
+        elif lower_raw in {"banglore", "bengaluru", "bengalore"}:
+            city_target = "Bangalore"
+        else:
+            city_target = lower_raw.title()
+
+        clean_q = f"hotels in {city_target}"
 
         params = {
             "engine": "google_hotels",
@@ -221,28 +359,41 @@ class SerpApiClient:
             return []
 
         today_str = datetime.date.today().isoformat()
-        if outbound_date < today_str:
-            logger.info("Outbound flight date %s is in the past; skipping live flight search.", outbound_date)
-            return []
+        actual_outbound = outbound_date
+        actual_return = return_date
+        if actual_outbound < today_str:
+            try:
+                d_out = datetime.date.fromisoformat(actual_outbound)
+                d_ret = datetime.date.fromisoformat(actual_return) if actual_return else d_out + datetime.timedelta(days=7)
+                diff = max(1, (d_ret - d_out).days)
+                future_out = datetime.date.today() + datetime.timedelta(days=7)
+                future_ret = future_out + datetime.timedelta(days=diff)
+                actual_outbound = future_out.isoformat()
+                actual_return = future_ret.isoformat()
+                logger.info("Outbound flight date %s is in the past; searching upcoming live fares for %s -> %s", outbound_date, actual_outbound, actual_return)
+            except Exception:
+                actual_outbound = (datetime.date.today() + datetime.timedelta(days=7)).isoformat()
+                actual_return = (datetime.date.today() + datetime.timedelta(days=14)).isoformat()
 
         arr_code = resolve_airport_code(destination)
-        if not arr_code:
-            arr_code = "GOI" if "goa" in destination.lower() else "DEL"
-
         dep_code = resolve_airport_code(origin) if origin else None
-        if not dep_code:
-            dep_code = "BOM" if arr_code == "GOI" else "DEL"
+
+        # Do NOT substitute unrelated random hubs (e.g. BOM/DEL) when user entered specific cities!
+        if not arr_code or not dep_code:
+            logger.info("Could not resolve specific airport codes for origin='%s' (%s) -> destination='%s' (%s)", origin, dep_code, destination, arr_code)
+            return []
 
         # Prevent circular route
         if dep_code == arr_code:
-            dep_code = "BOM" if arr_code != "BOM" else "DEL"
+            logger.warning("Circular route detected for %s to %s", dep_code, arr_code)
+            return []
 
         params = {
             "engine": "google_flights",
             "departure_id": dep_code,
             "arrival_id": arr_code,
-            "outbound_date": outbound_date,
-            "return_date": return_date,
+            "outbound_date": actual_outbound,
+            "return_date": actual_return,
             "currency": currency,
             "adults": max(1, travelers),
             "api_key": self.api_key,
@@ -259,16 +410,22 @@ class SerpApiClient:
                 flight_groups = data.get("best_flights", []) + data.get("other_flights", [])
                 results = []
 
+                from app.services.transit_service import get_nearby_transit
+                nearby_transit = get_nearby_transit(destination)
+                is_nearby_hub = bool(nearby_transit and not nearby_transit.get("has_direct_airport"))
+                nearby_distance = nearby_transit.get("nearby_airport", {}).get("distance", "") if nearby_transit else ""
+
                 for group in flight_groups[:limit]:
                     flights_list = group.get("flights", [])
                     if not flights_list:
                         continue
-                    leg = flights_list[0]
+                    first_leg = flights_list[0]
+                    final_leg = flights_list[-1]
 
-                    dep_info = leg.get("departure_airport", {})
-                    arr_info = leg.get("arrival_airport", {})
+                    dep_info = first_leg.get("departure_airport", {})
+                    arr_info = final_leg.get("arrival_airport", {})
 
-                    duration_mins = group.get("total_duration") or leg.get("duration", 0)
+                    duration_mins = group.get("total_duration") or sum(l.get("duration", 0) for l in flights_list)
                     hrs = duration_mins // 60
                     mins = duration_mins % 60
                     duration_str = f"{hrs}h {mins}m" if hrs else f"{mins}m"
@@ -278,9 +435,9 @@ class SerpApiClient:
                     price_str = converted_flight["formatted"] if converted_flight.get("converted_amount") else "Available"
 
                     results.append({
-                        "airline": leg.get("airline", "Commercial Airline"),
-                        "flight_number": leg.get("flight_number", ""),
-                        "airline_logo": leg.get("airline_logo"),
+                        "airline": first_leg.get("airline", "Commercial Airline"),
+                        "flight_number": first_leg.get("flight_number", ""),
+                        "airline_logo": first_leg.get("airline_logo"),
                         "departure_time": dep_info.get("time", ""),
                         "departure_airport": dep_info.get("name", dep_code),
                         "departure_code": dep_info.get("id", dep_code),
@@ -299,6 +456,10 @@ class SerpApiClient:
                         "source": "Google Flights via SerpApi",
                         "is_live": True,
                         "status": "Confirmed Live Airfare",
+                        "is_nearby_hub": is_nearby_hub,
+                        "nearby_destination": destination if is_nearby_hub else None,
+                        "hub_distance": nearby_distance if is_nearby_hub else None,
+                        "hub_note": f"Lands at {arr_code} ({nearby_distance} to {destination})" if is_nearby_hub else None,
                     })
 
                 return results

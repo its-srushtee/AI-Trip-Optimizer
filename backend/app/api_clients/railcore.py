@@ -61,6 +61,22 @@ POPULAR_STATIONS = [
     {"code": "TVC", "name": "Thiruvananthapuram Central", "city": "Trivandrum", "state": "Kerala"},
     {"code": "UDR", "name": "Udaipur City", "city": "Udaipur", "state": "Rajasthan"},
     {"code": "JU", "name": "Jodhpur", "city": "Jodhpur", "state": "Rajasthan"},
+    {"code": "HPT", "name": "Hosapete Junction (Hampi)", "city": "Hampi", "state": "Karnataka"},
+    {"code": "CBE", "name": "Coimbatore Junction (Ooty Gateway)", "city": "Coimbatore", "state": "Tamil Nadu"},
+    {"code": "MTP", "name": "Mettupalayam (Nilgiri Toy Train)", "city": "Ooty", "state": "Tamil Nadu"},
+    {"code": "ERS", "name": "Ernakulam Junction (Munnar Gateway)", "city": "Kochi", "state": "Kerala"},
+    {"code": "AWY", "name": "Aluva (Munnar Gateway)", "city": "Munnar", "state": "Kerala"},
+    {"code": "MYS", "name": "Mysuru Junction (Coorg Gateway)", "city": "Mysuru", "state": "Karnataka"},
+    {"code": "GOK", "name": "Gokarna Road", "city": "Gokarna", "state": "Karnataka"},
+    {"code": "LNL", "name": "Lonavala", "city": "Lonavala", "state": "Maharashtra"},
+    {"code": "ABR", "name": "Abu Road (Mount Abu Gateway)", "city": "Mount Abu", "state": "Rajasthan"},
+    {"code": "NJP", "name": "New Jalpaiguri (Darjeeling / Gangtok Gateway)", "city": "Siliguri", "state": "West Bengal"},
+    {"code": "PDY", "name": "Puducherry", "city": "Puducherry", "state": "Puducherry"},
+    {"code": "ALLP", "name": "Alappuzha (Alleppey)", "city": "Alleppey", "state": "Kerala"},
+    {"code": "CLT", "name": "Kozhikode (Wayanad Gateway)", "city": "Kozhikode", "state": "Kerala"},
+    {"code": "KQN", "name": "Kodai Road (Kodaikanal Gateway)", "city": "Kodaikanal", "state": "Tamil Nadu"},
+    {"code": "KGM", "name": "Kathgodam (Nainital Gateway)", "city": "Nainital", "state": "Uttarakhand"},
+    {"code": "YNRK", "name": "Yog Nagari Rishikesh", "city": "Rishikesh", "state": "Uttarakhand"},
 ]
 
 # Destination keyword to railway station code mapping
@@ -91,9 +107,31 @@ CITY_TO_STATION = {
     "amritsar": "ASR",
     "haridwar": "HW",
     "dehradun": "DDN",
-    "rishikesh": "HW",
+    "rishikesh": "YNRK",
     "kochi": "COK",
     "cochin": "COK",
+    "hampi": "HPT",
+    "hospet": "HPT",
+    "ooty": "CBE",
+    "munnar": "ERS",
+    "coorg": "MYS",
+    "madikeri": "MYS",
+    "gokarna": "GOK",
+    "lonavala": "LNL",
+    "mount abu": "ABR",
+    "abu road": "ABR",
+    "kasol": "CDG",
+    "darjeeling": "NJP",
+    "gangtok": "NJP",
+    "pondicherry": "PDY",
+    "puducherry": "PDY",
+    "alleppey": "ALLP",
+    "alappuzha": "ALLP",
+    "wayanad": "CLT",
+    "kodaikanal": "KQN",
+    "nainital": "KGM",
+    "mussoorie": "DDN",
+    "alibaug": "PNVL",
 }
 
 # Known international destinations / countries that have NO Indian Railways connectivity
@@ -136,6 +174,15 @@ def resolve_station_code(query_str: str | None) -> str:
     for stn in POPULAR_STATIONS:
         if q in stn["name"].lower() or q in stn["city"].lower():
             return stn["code"]
+
+    # Check nearby transit registry for destinations without direct stations
+    try:
+        from app.services.transit_service import get_nearby_transit
+        nearby = get_nearby_transit(q)
+        if nearby and nearby.get("nearby_railway"):
+            return nearby["nearby_railway"]["code"]
+    except Exception:
+        pass
 
     # Do NOT return dummy arbitrary codes like 'BERL' or 'PARI' for unmapped strings
     return ""

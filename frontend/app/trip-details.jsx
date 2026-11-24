@@ -41,8 +41,13 @@ import {
   Coins,
   Wallet,
   Train,
+  Navigation,
 } from 'lucide-react'
 import Sidebar from '../components/common/Sidebar.jsx'
+import TripPulseTab from '../components/trippulse/TripPulseTab.jsx'
+import AttractionExplanation from '../components/itinerary/AttractionExplanation.jsx'
+import ReplaceAttractionModal from '../components/itinerary/ReplaceAttractionModal.jsx'
+import WhatIfSimulator from '../components/itinerary/WhatIfSimulator.jsx'
 import { useSidebar } from '../hooks/useSidebar.js'
 import { api, getToken, clearToken, resolveImageUrl } from '../services/api.js'
 import { getUser, clearUser } from '../lib/userStore.js'
@@ -50,12 +55,77 @@ import { INTERESTS, currencyOptions, formatCurrency, getCurrencySymbol, getToday
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: Compass },
+  { id: 'trippulse', label: 'TripPulse AI', icon: Activity },
   { id: 'itinerary', label: 'Itinerary', icon: Calendar },
   { id: 'places', label: 'Places to Visit', icon: MapPin },
   { id: 'map', label: 'Map', icon: MapIcon },
   { id: 'flights_stay', label: 'Flights & Stay', icon: Plane },
   { id: 'budget', label: 'Budget', icon: DollarSign },
 ]
+
+function resolvePlaceImage(place, heroImage, destination) {
+  const rawUrl = place.image_url || ''
+  const isGenericHero =
+    !rawUrl ||
+    rawUrl === heroImage ||
+    rawUrl.includes('/images/hero.jpg') ||
+    rawUrl.includes('/images/goa.jpg')
+
+  // If a place has its own external distinct photo, use it directly
+  if (!isGenericHero && /^https?:\/\//i.test(rawUrl)) {
+    return rawUrl
+  }
+
+  const name = (place.name || '').toLowerCase()
+  const cat = (place.category || '').toLowerCase()
+  const tags = (place.tags || []).map((t) => t.toLowerCase())
+
+  // Distinct Thematic & Geographic Fallback Categories (generic, not destination-specific)
+  if (name.includes('waterfall') || cat.includes('waterfall')) {
+    return 'https://images.unsplash.com/photo-1546182990-dffeafbe841d?auto=format&fit=crop&w=800&q=80'
+  }
+  if (name.includes('scuba') || name.includes('snorkel') || name.includes('diving')) {
+    return 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=800&q=80'
+  }
+  if (name.includes('fort') || name.includes('castle') || name.includes('palace') || cat.includes('fort')) {
+    return 'https://images.unsplash.com/photo-1590523741831-ab7e8b8f9c7f?auto=format&fit=crop&w=800&q=80'
+  }
+  if (name.includes('temple') || name.includes('church') || name.includes('basilica') || name.includes('cathedral') || cat.includes('religion')) {
+    return 'https://images.unsplash.com/photo-1548625361-16eb16422f28?auto=format&fit=crop&w=800&q=80'
+  }
+  if (name.includes('market') || name.includes('bazaar') || name.includes('quarter') || name.includes('street')) {
+    return 'https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=800&q=80'
+  }
+  if (name.includes('seafood') || name.includes('restaurant') || name.includes('cafe') || cat.includes('food') || cat.includes('dining')) {
+    return 'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?auto=format&fit=crop&w=800&q=80'
+  }
+  if (name.includes('spa') || name.includes('yoga') || name.includes('wellness') || cat.includes('wellness')) {
+    return 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=800&q=80'
+  }
+
+  // Thematic Category Imagery
+  if (tags.includes('beaches') || cat.includes('beach') || name.includes('beach') || name.includes('coast')) {
+    return 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80'
+  }
+  if (tags.includes('adventure') || cat.includes('adventure') || tags.includes('water sports')) {
+    return 'https://images.unsplash.com/photo-1533240332313-0db49b459ad6?auto=format&fit=crop&w=800&q=80'
+  }
+  if (tags.includes('nature') || cat.includes('nature') || tags.includes('wildlife')) {
+    return 'https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=800&q=80'
+  }
+  if (tags.includes('history') || tags.includes('culture') || cat.includes('history') || cat.includes('heritage')) {
+    return 'https://images.unsplash.com/photo-1582510003544-4d00b7f74220?auto=format&fit=crop&w=800&q=80'
+  }
+  if (tags.includes('nightlife') || cat.includes('nightlife')) {
+    return 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=800&q=80'
+  }
+  if (tags.includes('shopping') || cat.includes('shopping') || cat.includes('bazaar')) {
+    return 'https://images.unsplash.com/photo-1605371924599-2d0365da1ae0?auto=format&fit=crop&w=800&q=80'
+  }
+
+  if (rawUrl && !isGenericHero) return resolveImageUrl(rawUrl)
+  return heroImage
+}
 
 export default function TripDetails() {
   const { id } = useParams()
@@ -120,6 +190,7 @@ export default function TripDetails() {
   // Map state
   const [selectedMapPlace, setSelectedMapPlace] = useState(null)
   const [mapProvider, setMapProvider] = useState('google')
+  const [replaceTarget, setReplaceTarget] = useState(null)
 
   // Fetch trip details from backend
   const fetchTrip = async () => {
@@ -154,23 +225,60 @@ export default function TripDetails() {
         // Fallback hero
       }
 
-      // Check sessionStorage first for instantly restored itinerary without losing state on refresh
-      let restored = false
-      try {
-        const cachedItinerary = sessionStorage.getItem(`itinerary_trip_${id}`)
-        if (cachedItinerary) {
-          const parsed = JSON.parse(cachedItinerary)
-          if (parsed && Array.isArray(parsed.days) && parsed.days.length > 0) {
-            setItinerary(parsed)
-            restored = true
-          }
+      // Check for valid existing itinerary in database first, then sessionStorage (with integrity check)
+      let validItinerary = null
+      const tripDest = (data.destination || '').toLowerCase().trim()
+      const tripOrig = (data.origin || data.preferences?.origin || '').toLowerCase().trim()
+
+      const isItineraryValid = (itin) => {
+        if (!itin || !Array.isArray(itin.days) || itin.days.length === 0) return false
+        const itinDest = (itin.destination || '').toLowerCase().trim()
+        if (itinDest && tripDest && !tripDest.includes(itinDest) && !itinDest.includes(tripDest)) {
+          return false
         }
-      } catch (e) {
-        // ignore parsing error
+        // Verify flights do not have corrupted BOM->DEL when trip is not Mumbai to Delhi
+        const sampleFlight = itin.transport?.flights?.[0]
+        if (
+          sampleFlight &&
+          sampleFlight.departure_code === 'BOM' &&
+          sampleFlight.arrival_code === 'DEL' &&
+          !tripDest.includes('delhi') &&
+          !tripOrig.includes('mumbai')
+        ) {
+          return false
+        }
+        return true
       }
 
-      // Generate itinerary if not already restored
-      if (!restored) {
+      // Priority 1: Check database preferences
+      if (isItineraryValid(data.preferences?.itinerary)) {
+        validItinerary = data.preferences.itinerary
+      }
+
+      // Priority 2: Check sessionStorage cache if DB has no itinerary
+      if (!validItinerary) {
+        try {
+          const cached = sessionStorage.getItem(`itinerary_trip_${id}`)
+          if (cached) {
+            const parsed = JSON.parse(cached)
+            if (isItineraryValid(parsed)) {
+              validItinerary = parsed
+            } else {
+              sessionStorage.removeItem(`itinerary_trip_${id}`)
+            }
+          }
+        } catch (e) {
+          sessionStorage.removeItem(`itinerary_trip_${id}`)
+        }
+      }
+
+      if (validItinerary) {
+        setItinerary(validItinerary)
+        try {
+          sessionStorage.setItem(`itinerary_trip_${id}`, JSON.stringify(validItinerary))
+        } catch (e) {}
+      } else {
+        sessionStorage.removeItem(`itinerary_trip_${id}`)
         generatePlan(data, token)
       }
     } catch (err) {
@@ -197,6 +305,9 @@ export default function TripDetails() {
       'maldives', 'male', 'thailand', 'bangkok', 'rome', 'italy', 'spain',
       'madrid', 'barcelona', 'toronto', 'canada', 'sydney', 'australia',
       'europe', 'america', 'africa', 'new zealand', 'vietnam', 'greece',
+      'cape town', 'vancouver', 'cairo', 'egypt', 'phuket', 'istanbul', 'turkey',
+      'colombo', 'sri lanka', 'kathmandu', 'nepal', 'bhutan', 'malaysia', 'kuala lumpur',
+      'philippines', 'palawan', 'south africa',
     ]
     if (foreignKeywords.some((k) => dest.includes(k) || orig.includes(k))) return false
 
@@ -209,21 +320,22 @@ export default function TripDetails() {
       'srinagar', 'darjeeling', 'gangtok', 'andaman', 'coorg', 'lonavala',
       'nagpur', 'surat', 'lucknow', 'kanpur', 'patna', 'indore', 'bhopal',
     ]
-    return indianDestinations.some((k) => dest.includes(k)) || tripCurrency === 'INR'
-  }, [trip?.destination, trip?.origin, trip?.preferences?.origin, tripCurrency])
+    return indianDestinations.some((k) => dest.includes(k))
+  }, [trip?.destination, trip?.origin, trip?.preferences?.origin])
 
   // Synchronize train search inputs with trip destination/dates
   useEffect(() => {
     if (trip) {
       setTrainFrom((prev) => prev || trip.origin || trip.preferences?.origin || 'Mumbai')
-      setTrainTo((prev) => prev || trip.destination || '')
+      const nearbyRail = itinerary?.transport?.nearby_transit?.nearby_railway?.name
+      setTrainTo((prev) => prev || nearbyRail || trip.destination || '')
       setTrainDate((prev) => prev || trip.start_date || new Date().toISOString().slice(0, 10))
       if (!isDomesticIndia) {
         setTransportTab('flights')
         setTrainsList([])
       }
     }
-  }, [trip, isDomesticIndia])
+  }, [trip, itinerary, isDomesticIndia])
 
   useEffect(() => {
     if (Array.isArray(itinerary?.transport?.trains) && itinerary.transport.trains.length > 0) {
@@ -321,8 +433,23 @@ export default function TripDetails() {
       )
       if (res && res.itinerary) {
         setItinerary(res.itinerary)
+        const targetTripId = tripData.id || id
         try {
-          sessionStorage.setItem(`itinerary_trip_${tripData.id || id}`, JSON.stringify(res.itinerary))
+          sessionStorage.setItem(`itinerary_trip_${targetTripId}`, JSON.stringify(res.itinerary))
+        } catch (e) {}
+
+        // Persist the itinerary to trip preferences in DB so it remains consistent
+        try {
+          api.updateTrip(
+            targetTripId,
+            {
+              preferences: {
+                ...(tripData.preferences || {}),
+                itinerary: res.itinerary,
+              },
+            },
+            token
+          ).catch(() => {})
         } catch (e) {}
       }
     } catch (err) {
@@ -557,6 +684,11 @@ export default function TripDetails() {
           <img
             src={heroImage}
             alt={trip.destination}
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              e.currentTarget.onerror = null
+              e.currentTarget.src = resolveImageUrl('/images/hero.jpg')
+            }}
             className="absolute inset-0 h-full w-full object-cover object-center transition-transform duration-700 ease-out"
           />
 
@@ -696,6 +828,17 @@ export default function TripDetails() {
                   >
                     <Icon size={15} />
                     <span>{tab.label}</span>
+                    {tab.id === 'trippulse' && (
+                      <span
+                        className={`ml-1 rounded-full px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider ${
+                          active
+                            ? 'bg-white/20 text-white'
+                            : 'bg-emerald-500/15 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400'
+                        }`}
+                      >
+                        Live
+                      </span>
+                    )}
                     {tab.id === 'itinerary' && itinerary?.days?.length > 0 && (
                       <span
                         className={`ml-1 rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
@@ -1080,6 +1223,23 @@ export default function TripDetails() {
                 </div>
               )}
 
+              {/* What-If Trip Simulator */}
+              {itinerary?.days && itinerary.days.length > 0 && (
+                <WhatIfSimulator
+                  trip={trip}
+                  itinerary={itinerary}
+                  onApplied={(res) => {
+                    if (res?.trip) setTrip(res.trip)
+                    if (res?.itinerary) {
+                      setItinerary(res.itinerary)
+                      try {
+                        sessionStorage.setItem(`itinerary_trip_${id}`, JSON.stringify(res.itinerary))
+                      } catch (e) {}
+                    }
+                  }}
+                />
+              )}
+
               {/* Days List / Timeline */}
               {itinerary?.days && itinerary.days.length > 0 ? (
                 <div className="space-y-6">
@@ -1171,6 +1331,12 @@ export default function TripDetails() {
                                       {act.estimated_cost && <span className="font-semibold text-emerald-700 dark:text-emerald-300">💰 {act.estimated_cost}</span>}
                                     </div>
                                   )}
+                                  {act && (
+                                    <AttractionExplanation
+                                      activity={act}
+                                      onFindAlternative={() => setReplaceTarget({ dayNumber: day.day, activity: act })}
+                                    />
+                                  )}
                                 </div>
                               )
                             })()}
@@ -1204,6 +1370,12 @@ export default function TripDetails() {
                                       {act.estimated_cost && <span className="font-semibold text-emerald-700 dark:text-emerald-300">💰 {act.estimated_cost}</span>}
                                     </div>
                                   )}
+                                  {act && (
+                                    <AttractionExplanation
+                                      activity={act}
+                                      onFindAlternative={() => setReplaceTarget({ dayNumber: day.day, activity: act })}
+                                    />
+                                  )}
                                 </div>
                               )
                             })()}
@@ -1236,6 +1408,12 @@ export default function TripDetails() {
                                       {act.estimated_duration && <span>⏱ {act.estimated_duration}</span>}
                                       {act.estimated_cost && <span className="font-semibold text-emerald-700 dark:text-emerald-300">💰 {act.estimated_cost}</span>}
                                     </div>
+                                  )}
+                                  {act && (
+                                    <AttractionExplanation
+                                      activity={act}
+                                      onFindAlternative={() => setReplaceTarget({ dayNumber: day.day, activity: act })}
+                                    />
                                   )}
                                 </div>
                               )
@@ -1335,7 +1513,7 @@ export default function TripDetails() {
               {filteredPlaces.length > 0 ? (
                 <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                   {filteredPlaces.map((place, idx) => {
-                    const placeImg = resolveImageUrl(place.image_url || heroImage)
+                    const placeImg = resolvePlaceImage(place, heroImage, trip?.destination)
                     // Check if place matches any user interest
                     const matchesPreference = (trip.interests || []).some(
                       (int) =>
@@ -1354,6 +1532,11 @@ export default function TripDetails() {
                             <img
                               src={placeImg}
                               alt={place.name}
+                              referrerPolicy="no-referrer"
+                              onError={(e) => {
+                                e.currentTarget.onerror = null
+                                e.currentTarget.src = resolveImageUrl('/images/hero.jpg')
+                              }}
                               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-black/20" />
@@ -1687,9 +1870,114 @@ export default function TripDetails() {
                 const liveHotels = Array.isArray(itinerary?.hotels) ? itinerary.hotels : []
                 const guidelines = Array.isArray(itinerary?.transport?.guidelines) ? itinerary.transport.guidelines : []
                 const recommendedMode = itinerary?.transport?.recommended_mode || (isDomesticIndia ? 'Train' : 'Flight')
+                const nearbyTransit = itinerary?.transport?.nearby_transit || null
 
                 return (
-                  <div className="grid gap-6 lg:grid-cols-2">
+                  <div className="space-y-6">
+                    {/* Nearby Transit Gateways Banner (When destination has no direct commercial airport) */}
+                    {nearbyTransit && !nearbyTransit.has_direct_airport && (
+                      <div className="rounded-2xl border border-blue-200/90 bg-gradient-to-r from-blue-50/90 via-indigo-50/60 to-white dark:border-blue-900/60 dark:from-blue-950/40 dark:via-slate-900 dark:to-slate-900 p-4 shadow-xs">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
+                          <div className="flex items-center gap-2">
+                            <div className="h-7 w-7 rounded-lg bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300 flex items-center justify-center font-bold shrink-0">
+                              <Navigation size={14} />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-xs font-bold text-slate-900 dark:text-white">
+                                  Transit Gateway for {nearbyTransit.destination_name || trip.destination}
+                                </span>
+                                <span className="rounded-full bg-amber-100 dark:bg-amber-950/70 border border-amber-300 dark:border-amber-700 px-2 py-0.2 text-[9px] font-bold text-amber-800 dark:text-amber-300">
+                                  No Direct Commercial Airport
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                {nearbyTransit.notice || `${trip.destination} has no commercial airport. Travel via the nearest airport or railway gateway.`}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid sm:grid-cols-2 gap-3 pt-1">
+                          {/* Nearby Airport Card */}
+                          {nearbyTransit.nearby_airport && (
+                            <div className="rounded-xl border border-blue-100/90 bg-white/90 dark:border-slate-800 dark:bg-slate-800/80 p-3 flex flex-col justify-between">
+                              <div>
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                                    <Plane size={11} /> Nearest Airport
+                                  </span>
+                                  <span className="rounded bg-blue-100 dark:bg-blue-900/60 px-1.5 py-0.2 font-mono text-[10px] font-bold text-blue-800 dark:text-blue-300">
+                                    {nearbyTransit.nearby_airport.code}
+                                  </span>
+                                </div>
+                                <p className="text-xs font-bold text-slate-900 dark:text-white">
+                                  {nearbyTransit.nearby_airport.name}
+                                </p>
+                                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mt-0.5">
+                                  Distance: <strong className="text-slate-700 dark:text-slate-300">{nearbyTransit.nearby_airport.distance}</strong>
+                                </p>
+                                {nearbyTransit.nearby_airport.transfer_tip && (
+                                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 line-clamp-2">
+                                    Transfer: {nearbyTransit.nearby_airport.transfer_tip}
+                                  </p>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setTransportTab('flights')}
+                                className="mt-2.5 flex items-center justify-center gap-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 py-1 text-[11px] font-semibold text-blue-600 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-colors"
+                              >
+                                <span>View Flights to {nearbyTransit.nearby_airport.code}</span>
+                                <ExternalLink size={10} />
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Nearby Railway Station Card */}
+                          {nearbyTransit.nearby_railway && (
+                            <div className="rounded-xl border border-emerald-100/90 bg-white/90 dark:border-slate-800 dark:bg-slate-800/80 p-3 flex flex-col justify-between">
+                              <div>
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                                    <Train size={11} /> Nearest Railway Station
+                                  </span>
+                                  <span className="rounded bg-emerald-100 dark:bg-emerald-900/60 px-1.5 py-0.2 font-mono text-[10px] font-bold text-emerald-800 dark:text-emerald-300">
+                                    {nearbyTransit.nearby_railway.code}
+                                  </span>
+                                </div>
+                                <p className="text-xs font-bold text-slate-900 dark:text-white">
+                                  {nearbyTransit.nearby_railway.name}
+                                </p>
+                                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mt-0.5">
+                                  Distance: <strong className="text-slate-700 dark:text-slate-300">{nearbyTransit.nearby_railway.distance}</strong>
+                                </p>
+                                {nearbyTransit.nearby_railway.transfer_tip && (
+                                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 line-clamp-2">
+                                    Transfer: {nearbyTransit.nearby_railway.transfer_tip}
+                                  </p>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTransportTab('trains')
+                                  if (nearbyTransit.nearby_railway.name) {
+                                    setTrainTo(nearbyTransit.nearby_railway.name)
+                                  }
+                                }}
+                                className="mt-2.5 flex items-center justify-center gap-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors"
+                              >
+                                <span>Search Trains to {nearbyTransit.nearby_railway.code}</span>
+                                <Train size={10} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid gap-6 lg:grid-cols-2">
                     {/* Transport Card (Flights & Trains sub-tabs - NO Bus tab) */}
                     <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs flex flex-col justify-between dark:border-slate-800 dark:bg-slate-900">
                       <div>
@@ -1737,17 +2025,32 @@ export default function TripDetails() {
                               <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
                                 Available Flight Schedules
                               </span>
-                              {liveFlights.length > 0 && (
-                                liveFlights.some((f) => f.is_live) ? (
-                                  <span className="rounded-full bg-emerald-100 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-750 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300">
-                                    Confirmed Live Inventory
-                                  </span>
-                                ) : (
-                                  <span className="rounded-full bg-amber-100 dark:bg-amber-950/70 border border-amber-300 dark:border-amber-700 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:text-amber-300">
-                                    Estimated Market Guidance
-                                  </span>
-                                )
-                              )}
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    sessionStorage.removeItem(`itinerary_trip_${id}`)
+                                    if (trip) generatePlan(trip)
+                                  }}
+                                  disabled={optimizing}
+                                  className="flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors shadow-2xs"
+                                  title="Force live refresh of flight routes and fares"
+                                >
+                                  <RefreshCw size={11} className={optimizing ? 'animate-spin text-blue-600' : ''} />
+                                  <span>{optimizing ? 'Updating…' : 'Refresh Live Flights'}</span>
+                                </button>
+                                {liveFlights.length > 0 && (
+                                  liveFlights.some((f) => f.is_live) ? (
+                                    <span className="rounded-full bg-emerald-100 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-750 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300">
+                                      Confirmed Live Inventory
+                                    </span>
+                                  ) : (
+                                    <span className="rounded-full bg-amber-100 dark:bg-amber-950/70 border border-amber-300 dark:border-amber-700 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:text-amber-300">
+                                      Estimated Market Guidance
+                                    </span>
+                                  )
+                                )}
+                              </div>
                             </div>
 
                             {liveFlights.length > 0 ? (
@@ -1763,6 +2066,10 @@ export default function TripDetails() {
                                           <img
                                             src={f.airline_logo}
                                             alt={f.airline}
+                                            referrerPolicy="no-referrer"
+                                            onError={(e) => {
+                                              e.currentTarget.style.display = 'none'
+                                            }}
                                             className="h-6 w-6 object-contain rounded"
                                           />
                                         ) : (
@@ -2127,6 +2434,11 @@ export default function TripDetails() {
                                   <img
                                     src={h.thumbnail}
                                     alt={h.name}
+                                    referrerPolicy="no-referrer"
+                                    onError={(e) => {
+                                      e.currentTarget.onerror = null
+                                      e.currentTarget.src = resolveImageUrl('/images/hero.jpg')
+                                    }}
                                     className="h-24 w-full sm:w-28 rounded-lg object-cover shrink-0"
                                   />
                                 )}
@@ -2238,7 +2550,8 @@ export default function TripDetails() {
                       </div>
                     </div>
                   </div>
-                )
+                </div>
+              )
               })()}
             </div>
           )}
@@ -2420,8 +2733,10 @@ export default function TripDetails() {
                       {formatCurrency(stayCost, bCurr)}
                     </p>
                     <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1">
-                      <span>{stayPct}% of estimated total</span>
-                      <span>{duration.nights} night{duration.nights > 1 ? 's' : ''} stay</span>
+                      <span>{stayPct}% · {duration.nights} night{duration.nights > 1 ? 's' : ''} total</span>
+                      <span className="font-semibold text-violet-600 dark:text-violet-400">
+                        ~{formatCurrency(Math.round(stayCost / Math.max(1, duration.nights)), bCurr)}/night
+                      </span>
                     </div>
                   </div>
 
@@ -2435,8 +2750,10 @@ export default function TripDetails() {
                       {formatCurrency(foodCost, bCurr)}
                     </p>
                     <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1">
-                      <span>{foodPct}% of estimated total</span>
-                      <span>~{formatCurrency(Math.round(foodCost / Math.max(1, duration.days)), bCurr)}/day</span>
+                      <span>{foodPct}% · {duration.days} day{duration.days > 1 ? 's' : ''} total</span>
+                      <span className="font-semibold text-amber-600 dark:text-amber-400">
+                        ~{formatCurrency(Math.round(foodCost / Math.max(1, duration.days)), bCurr)}/day
+                      </span>
                     </div>
                   </div>
 
@@ -2450,8 +2767,10 @@ export default function TripDetails() {
                       {formatCurrency(actCost, bCurr)}
                     </p>
                     <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1">
-                      <span>{actPct}% of estimated total</span>
-                      <span>Sightseeing & entries</span>
+                      <span>{actPct}% · {duration.days} day{duration.days > 1 ? 's' : ''} total</span>
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                        ~{formatCurrency(Math.round(actCost / Math.max(1, duration.days)), bCurr)}/day
+                      </span>
                     </div>
                   </div>
 
@@ -2465,8 +2784,10 @@ export default function TripDetails() {
                       {formatCurrency(transitCost, bCurr)}
                     </p>
                     <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1">
-                      <span>{transitPct}% of estimated total</span>
-                      <span>Taxis, subway, & buses</span>
+                      <span>{transitPct}% · {duration.days} day{duration.days > 1 ? 's' : ''} total</span>
+                      <span className="font-semibold text-teal-600 dark:text-teal-400">
+                        ~{formatCurrency(Math.round(transitCost / Math.max(1, duration.days)), bCurr)}/day
+                      </span>
                     </div>
                   </div>
 
@@ -2480,8 +2801,10 @@ export default function TripDetails() {
                       {formatCurrency(miscCost, bCurr)}
                     </p>
                     <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1">
-                      <span>{miscPct}% of estimated total</span>
-                      <span>Emergency & contingency</span>
+                      <span>{miscPct}% · {duration.days} day{duration.days > 1 ? 's' : ''} total</span>
+                      <span className="font-semibold text-rose-600 dark:text-rose-400">
+                        ~{formatCurrency(Math.round(miscCost / Math.max(1, duration.days)), bCurr)}/day
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -2535,7 +2858,31 @@ export default function TripDetails() {
               </div>
             )
           })()}
+
+          {activeTab === 'trippulse' && (
+            <TripPulseTab
+              trip={trip}
+              onTripUpdated={fetchTrip}
+            />
+          )}
         </div>
+
+        {replaceTarget && (
+          <ReplaceAttractionModal
+            tripId={trip.id}
+            dayNumber={replaceTarget.dayNumber}
+            activity={replaceTarget.activity}
+            onClose={() => setReplaceTarget(null)}
+            onReplaced={(updatedItinerary) => {
+              if (updatedItinerary) {
+                setItinerary(updatedItinerary)
+                try {
+                  sessionStorage.setItem(`itinerary_trip_${id}`, JSON.stringify(updatedItinerary))
+                } catch (e) {}
+              }
+            }}
+          />
+        )}
 
         {isEditing && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs animate-fade-in">

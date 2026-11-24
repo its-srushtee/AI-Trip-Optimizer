@@ -23,6 +23,7 @@ class OptimizeRequest(BaseModel):
 
 
 class ActivityItem(BaseModel):
+    attraction_id: str | None = None
     name: str
     time_slot: str  # "Morning", "Afternoon", "Evening"
     time_window: str | None = None  # e.g., "08:30 AM - 11:30 AM"
@@ -32,6 +33,7 @@ class ActivityItem(BaseModel):
     estimated_cost: str | None = None
     why_it_matches: str | None = None
     transit_info: str | None = None
+    recommendation_explanation: dict | None = None
 
 
 class DayOut(BaseModel):

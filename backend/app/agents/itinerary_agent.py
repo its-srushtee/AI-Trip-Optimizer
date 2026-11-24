@@ -130,180 +130,43 @@ class MealEngine:
         self._pool = self._build_pool()
 
     def _build_pool(self) -> dict[str, list[str]]:
-        c = self.city_lower
+        city_t = self.city.title()
         is_veg = self.is_veg
+        food_pref = self.food_pref
 
-        # Regional meal repositories
-        if "manali" in c:
-            b = [
-                "Artisan cafe porridge with wild honey, walnuts, and Himalayan herbal tea",
-                "Warm bakery sourdough, masala cheese omelette, and freshly roasted espresso" if not is_veg else "Fresh apple crumble, toasted multigrain bread, and Himalayan butter tea",
-                "Poha and stuffed aloo parathas with fresh mountain curd and spicy mint pickle",
-                "Banana walnut buckwheat pancakes with local apricot jam and ginger lemon tea",
-                "Tibetan Tingmo steamed buns with spiced chickpea curry and honey lemon water",
-                "Crispy methi paratha with fresh churned white butter and spiced masala chai",
-                "Old Manali organic granola bowl with mountain berries, chia seeds, and yak milk curd",
-            ]
-            l = [
-                "Authentic Himachali Siddu stuffed with spiced poppy seeds and desi ghee at a heritage village dhaba",
-                "Steamed vegetable momos and piping hot Thukpa noodle soup with chili chutney",
-                "Pahadi Dal and slow-cooked Madra lentils served with fragrant steamed basmati rice",
-                "Fresh pan-fried Beas river trout with garlic herb butter and mountain greens" if not is_veg else "Paneer Tikka skewers with roasted mountain bell peppers and mint chutney",
-                "Himachali Dham feast featuring lentils, spiced kidney beans, and saffron sweet rice",
-                "Rustic wood-fired thin crust pizza and local spiced apple cider at a riverside cafe",
-                "Spiced Pahadi rajma bowl with red rice, radish salad, and bhangjeera chutney",
-            ]
-            d = [
-                "Traditional Himachali Dham (Madra, sweet rice, and lentils) at an authentic local rasoi",
-                "Fireside lodge dinner featuring slow-cooked saffron rice, paneer rogan josh, and hot naan",
-                "Wood-fired artisanal sourdough flatbreads and craft mountain cider by the river",
-                "Sizzling Tibetan momos, chili garlic noodles, and steaming sweet corn soup",
-                "Candlelit riverside dinner with slow-braised mountain stew and warm herb bread",
-                "Pahadi Kadi with steamed red rice, roasted papad, and walnut chutney",
-                "Starlit terrace dinner enjoying fresh grilled skewers and warm spiced almond milk",
-            ]
-        elif "kyoto" in c:
-            b = [
-                "Traditional Kyoto Obanzai breakfast with simmered seasonal vegetables and dashi",
-                "Fluffy Japanese souffle pancakes with matcha honey and pour-over drip coffee",
-                "Warm tamagoyaki rolled omelet, miso soup with wakame, and onigiri rice ball",
-                "Freshly baked matcha melon pan and cold-brew green tea in historic Gion",
-                "Japanese rice porridge (Okayu) topped with pickled plum (umeboshi) and roasted nori",
-                "Artisanal sourdough toast with yuzu marmalade and specialty Kyoto single-origin coffee",
-                "Silken tofu hot pot breakfast with grated ginger and green scallions at a temple cafe",
-            ]
-            l = [
-                "Shojin Ryori Buddhist vegetarian temple cuisine with delicate yuba (tofu skin)",
-                "Chirashizushi bowl with fresh Kansai sashimi and pickled ginger" if not is_veg else "Crisp seasonal vegetable tempura over hand-cut soba noodles in chilled tsuyu broth",
-                "Udon noodle clay pot in rich dashi broth with maitake mushrooms and soft poached egg",
-                "Kyoto-style savory okonomiyaki pancake grilled with scallions and artisan brown sauce",
-                "Matcha soba noodles served over ice with seasonal mountain vegetable tempura",
-                "Tender chicken or mushroom katsu donburi simmered in sweet soy broth over rice",
-                "Steamed bamboo leaf rice balls paired with slow-simmered lotus root and miso soup",
-            ]
-            d = [
-                "Seasonal multi-course Kaiseki tasting dinner overlooking the serene Kamogawa River",
-                "Charcoal-grilled yakitori and seasonal vegetable skewers in lantern-lit Pontocho Alley",
-                "Simmered Kyoto duck hot pot" if not is_veg else "Yudofu boiling tofu hot pot with sesame ponzu and mountain herbs in Nanzenji",
-                "Interactive Teppanyaki dinner featuring premium Wagyu beef or grilled king oyster mushrooms",
-                "Atmospheric ramen tasting sampling 16-hour simmered broth with spring onions and bamboo shoots",
-                "Traditional Izakaya feast with grilled eggplant in sweet red miso and crisp draft beer",
-                "Zen garden restaurant dinner featuring seasonal Kansai root vegetable delicacies and plum wine",
-            ]
-        elif "interlaken" in c or "swiss" in c or "alps" in c:
-            b = [
-                "Bircher muesli with fresh alpine raspberries, local mountain cheeses, and crusty artisan bread",
-                "Warm butter croissants, alpine wildflower honey, and freshly brewed Swiss roast coffee",
-                "Hearty alpine breakfast platter with Emmental cheese, soft boiled farm egg, and dark rye",
-                "Warm Swiss apple strudel slice with cinnamon cream and hot mountain herbal tea",
-                "Swiss hazelnut pastry with fresh berry compote and hot dark chocolate in Unterseen",
-                "Toasted brioche with Gruyère cheese spread and fresh pressed Valais orchard apple juice",
-                "Rustic farmer's breakfast with scrambled farm eggs, fried alpine potatoes, and fresh milk",
-            ]
-            l = [
-                "Traditional Swiss Rösti topped with melted Gruyère cheese and sunny-side farm egg",
-                "Hearty Grisons barley soup with crusty mountain bread and local Alpine butter",
-                "Thin crust Swiss Tarte Flambée topped with sweet onions and crème fraîche",
-                "Fresh Lake Brienz whitefish fillet with herb butter and parsley potatoes" if not is_veg else "Creamy wild chanterelle mushroom ragout in puff pastry shell",
-                "Alpine macaroni (Älplermagronen) with caramelized onions, melted cheese, and apple sauce",
-                "Rustic fondue baguette sandwich enjoyed on a panoramic mountain overlook terrace",
-                "Swiss cheese and dried fruit picnic basket sampled along the scenic Lake Thun shoreline",
-            ]
-            d = [
-                "Authentic bubbling Swiss cheese fondue with crusty bread cubes, baby potatoes, and Fendant wine",
-                "Raclette dinner with melted cheese scraped over roasted new potatoes and pickled gherkins",
-                "Zürcher Geschnetzeltes slow-cooked in white wine mushroom sauce with crispy golden Rösti",
-                "Lakeside terrace dinner sampling grilled trout and seasonal Swiss garden vegetables",
-                "Cozy mountain chalet dinner featuring braised alpine beef" if not is_veg else "Braised alpine red cabbage, chestnut dumplings, and roasted root vegetables",
-                "Fireside lodge dinner with cheese spaetzle, caramelized onions, and crisp Swiss cider",
-                "Panoramic revolving mountain restaurant feast overlooking the Eiger, Mönch, and Jungfrau peaks",
-            ]
-        elif "bali" in c:
-            b = [
-                "Tropical dragonfruit smoothie bowl topped with toasted coconut, chia seeds, and Balinese coffee",
-                "Warm black rice pudding (Bubur Ketan Hitam) with rich coconut cream and sliced ripe mango",
-                "Fluffy banana banana pancakes drizzled with organic palm nectar and fresh papaya juice",
-                "Balinese scrambled eggs with turmeric and kaffir lime served over sourdough toast",
-                "Avocado toast topped with local goat feta, poached eggs, and fresh cold brew in Canggu",
-                "Sweet coconut crepes (Dadar Gulung) stuffed with grated palm sugar and fresh young coconut",
-                "Healthy organic acai bowl with passionfruit, granola, and chilled coconut water",
-            ]
-            l = [
-                "Authentic Nasi Campur featuring spiced tempeh, sambal matah, and fragrant jasmine rice",
-                "Traditional Gado-Gado vegetable salad with warm savory peanut dressing and krupuk crackers",
-                "Balinese Mie Goreng wok-tossed noodles with fresh Asian greens and fried shallots",
-                "Spiced grilled fish wrapped in banana leaf (Pepes Ikan)" if not is_veg else "Crispy spiced tofu and tempeh skewers with chili tamarind sauce",
-                "Organic farm-to-table quinoa and roasted pumpkin salad at an Ubud jungle eco-cafe",
-                "Aromatic Soto Ayam chicken turmeric broth with glass noodles" if not is_veg else "Sayur Lodeh fragrant coconut vegetable stew with steamed rice cakes",
-                "Beach club wood-fired pizza and crisp seasonal green salad overlooking the surf breaks",
-            ]
-            d = [
-                "Jimbaran Bay beachfront sunset grill with coconut-husk grilled seafood and sambal matah",
-                "Balinese Sate Lilit minced skewers grilled over lemongrass stalks with lawar green bean salad",
-                "Crispy Balinese Duck (Bebek Betutu) slow-roasted in banana leaves with rich yellow spice paste",
-                "Candlelit riverside dinner in Ubud featuring multi-course royal Balinese tasting dishes",
-                "Clifftop Uluwatu sunset dinner enjoying fresh tropical curries and ginger lemongrass coolers",
-                "Contemporary Indonesian fusion dining with braised jackfruit rendang and turmeric rice",
-                "Open-air pavilion feast accompanied by traditional Balinese gamelan music and coconut ice cream",
-            ]
-        elif "chefchaouen" in c or "morocco" in c:
-            b = [
-                "Warm Moroccan khobz bread with fresh goat cheese, black olives, fig jam, and mint tea",
-                "Flaky layered Msemmen pancakes drizzled with wildflower honey and sweet spiced coffee",
-                "Shakshuka poached eggs simmered in rich cumin tomato sauce with warm flatbread",
-                "Harcha semolina flatbread with fresh local butter, dates, and fragrant orange blossom tea",
-                "Creamy bissara fava bean soup with extra virgin olive oil, cumin, and crusty bread",
-                "Moroccan Baghrir thousand-hole honeycomb pancakes soaked in melted honey butter",
-                "Artisan fruit platter with sweet pomegranate seeds, dates, walnuts, and Moroccan mint infusion",
-            ]
-            l = [
-                "Fragrant vegetable or lamb tagine slow-cooked in earthenware with preserved lemons and olives",
-                "Steamed Moroccan couscous with seven garden vegetables, chickpeas, and caramelized onions",
-                "Crispy chicken pastilla pastry dusted with cinnamon sugar and ground toasted almonds" if not is_veg else "Sweet caramelized onion and almond pastilla with seasonal greens",
-                "Traditional Zaalouk roasted eggplant dip and spiced tomato chermoula served with warm khobz",
-                "Grilled spiced kefta skewers with harissa sauce" if not is_veg else "Spiced chickpea and lentil tagine with apricots and roasted sesame",
-                "Fresh Mediterranean salad with crisp cucumbers, tomatoes, goat cheese, and mountain oregano",
-                "Rooftop medina lunch sampling savory lamb skewers, roasted peppers, and chilled citrus juice",
-            ]
-            d = [
-                "Candlelit riad courtyard dinner featuring slow-braised tagine and saffron-infused rice",
-                "Royal couscous feast crowned with roasted vegetables, raisins, and sweet cinnamon broth",
-                "Harira traditional aromatic soup paired with sweet dates, chebakia sesame pastry, and warm bread",
-                "Plaza Uta el-Hammam terrace dinner overlooking the illuminated Kasbah with spiced tagine",
-                "Tender oven-roasted mountain goat with cumin salt and roasted baby potatoes in the Medina",
-                "Seafood tagine with Atlantic catch, sweet bell peppers, and preserved lemon chermoula",
-                "Starlit rooftop feast with Moroccan mint tea ceremony and sweet almond gazelle horns pastry",
-            ]
-        else:
-            # Universal Dynamic Culinary Generator
-            city_t = self.city.title()
-            b = [
-                f"Freshly baked artisan pastries, seasonal local fruit, and specialty espresso in {city_t}",
-                f"Hearty farm-to-table breakfast with country sourdough, local cheese, and orchard preserves",
-                f"Warm bakery croissants with fruit compote and barista-crafted pour-over coffee",
-                f"Avocado toast on whole-grain sourdough with soft farm eggs and fresh pressed juice",
-                f"Artisan bakery breakfast sampling regional morning specialties and specialty tea",
-                f"Organic granola bowl with Greek yogurt, wild honey, and toasted orchard nuts",
-                f"Classic local cafe breakfast with toasted brioche, farm butter, and hot chocolate",
-            ]
-            l = [
-                f"Celebrated neighborhood bistro lunch sampling signature regional specialties of {city_t}",
-                f"Atmospheric local food hall tasting featuring artisan cheeses, charcuterie, and fresh salads",
-                f"Scenic terrace lunch overlooking historic {city_t} streetscapes with seasonal garden fare",
-                f"Authentic local market tasting sampling regional street delicacies and fresh baked flatbreads",
-                f"Waterfront / garden bistro lunch with freshly caught catch or seasonal risotto",
-                f"Charming courtyard cafe lunch with artisanal quiche, crisp salad, and house-made lemonade",
-                f"Historic tavern lunch sampling slow-simmered regional stews and rustic hearth bread",
-            ]
-            d = [
-                f"Dinner reservation at a top-rated restaurant highlighting authentic regional cuisine of {city_t}",
-                f"Candlelit courtyard dinner enjoying multi-course gastronomic tasting menu with local wine",
-                f"Scenic panoramic restaurant with evening skyline views of {city_t} and seasonal dessert",
-                f"Historic district tavern dinner sampling slow-braised local specialties and craft beverages",
-                f"Vibrant central square dining with open-air terrace seating, fresh pasta / roasted delicacies",
-                f"Atmospheric wine bar & bistro dinner featuring artisanal small plates and decadent dessert",
-                f"Sunset view dining room experiencing modern gastronomic interpretations of local classics",
-            ]
+        # Dynamic, context-aware and dietary-aligned culinary generator
+        diet_tag = " (Vegetarian)" if is_veg else ""
+
+        b = [
+            f"Freshly baked artisan pastries, seasonal local fruit, and specialty espresso in {city_t}",
+            f"Hearty farm-to-table breakfast with country sourdough, local cheese, and orchard preserves{diet_tag}",
+            f"Warm bakery sourdough with fruit compote and barista-crafted pour-over coffee",
+            f"Avocado toast on whole-grain sourdough with soft farm eggs and fresh pressed juice" if not is_veg else f"Avocado toast on toasted seeded sourdough with fresh herbs and citrus juice",
+            f"Artisan bakery breakfast sampling regional morning specialties and spiced tea in {city_t}",
+            f"Organic granola bowl with Greek yogurt, wild honey, and toasted orchard nuts",
+            f"Classic local cafe breakfast with toasted brioche, farm butter, and hot chocolate",
+            f"Wholesome breakfast platter with local preserves, baked flatbread, and herbal infusion",
+        ]
+        l = [
+            f"Celebrated neighborhood bistro lunch sampling signature regional specialties of {city_t}{diet_tag}",
+            f"Atmospheric local food hall tasting featuring artisan cheeses, delicacies, and fresh market salads",
+            f"Scenic terrace lunch overlooking historic {city_t} streetscapes with seasonal garden fare",
+            f"Authentic local market tasting sampling regional street delicacies and fresh baked flatbreads",
+            f"Waterfront / garden bistro lunch with seasonal risotto and fresh culinary creations{diet_tag}",
+            f"Charming courtyard cafe lunch with artisanal quiche, crisp salad, and house-made lemonade",
+            f"Historic tavern lunch sampling slow-simmered regional dishes and rustic hearth bread",
+            f"Traditional dining house lunch sampling slow-cooked specialties and seasonal produce of {city_t}",
+        ]
+        d = [
+            f"Dinner reservation at a top-rated restaurant highlighting authentic regional cuisine of {city_t}{diet_tag}",
+            f"Candlelit courtyard dinner enjoying multi-course gastronomic tasting menu with local wine / beverage",
+            f"Scenic panoramic restaurant with evening skyline views of {city_t} and seasonal dessert",
+            f"Historic district tavern dinner sampling slow-braised local specialties and craft beverages",
+            f"Vibrant central square dining with open-air terrace seating, fresh handmade pasta / roasted delicacies",
+            f"Atmospheric bistro dinner featuring artisanal small plates and decadent regional dessert",
+            f"Sunset view dining room experiencing modern gastronomic interpretations of local classics in {city_t}",
+            f"Starlit garden dinner with local signature delicacies, spiced reductions, and artisanal desserts",
+        ]
 
         return {"breakfast": b, "lunch": l, "dinner": d}
 
@@ -345,8 +208,21 @@ class ItineraryAgent(BaseAgent):
         req = state["request"]
         start = date.fromisoformat(req["start_date"])
         end = date.fromisoformat(req["end_date"])
-        nights = max(0, (end - start).days)
-        total_days = nights + 1
+        diff_days = max(1, (end - start).days)
+        
+        # Explicit duration requested (e.g. 2-day trip) overrides date difference
+        req_days = req.get("duration") or req.get("days") or req.get("total_days") or req.get("duration_days")
+        if req_days and int(req_days) > 0:
+            total_days = int(req_days)
+            nights = max(1, total_days - 1)
+        else:
+            # If end date minus start date is 1, it is a 2-day/1-night trip.
+            # If dates are same day, it is a 1-day day trip.
+            nights = max(0, (end - start).days)
+            total_days = max(1, nights if nights > 0 and req.get("inclusive_dates") is False else (nights + 1 if nights > 0 else 1))
+            if req.get("trip_days") == 2 or req.get("two_day_trip"):
+                total_days = 2
+                nights = 1
         budget = int(req.get("budget", 1000))
         currency = (req.get("currency") or req.get("preferences", {}).get("currency") or "USD").upper()
         curr_sym = CURRENCY_SYMBOLS.get(currency, "$")
@@ -1008,4 +884,6 @@ class ItineraryAgent(BaseAgent):
                 "interests": interests,
             },
         }
+        from app.services.explainability_service import enrich_itinerary_with_explanations
+        enrich_itinerary_with_explanations(state["itinerary"])
         return state

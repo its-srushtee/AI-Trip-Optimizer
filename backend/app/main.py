@@ -37,10 +37,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="AI Trip Optimizer API", version="0.1.0", lifespan=lifespan)
-
+origins = [
+    "https://ai-trip-optimizer-six.vercel.app",
+    "http://localhost:5173"
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
